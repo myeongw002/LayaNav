@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
+import numpy as np
+from PySide6.QtWidgets import QApplication
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import numpy as np  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-from layanav.gui.app import MainWindow  # noqa: E402
+from layanav.gui.app import MainWindow
 
 
 def test_gui_start_edit_step_and_reset():
