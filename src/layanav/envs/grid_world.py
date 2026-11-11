@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import gymnasium as gym
 import numpy as np
@@ -46,7 +46,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
     arrays), `start` and `goal` (x, y) for deterministic hand-built scenarios.
     """
 
-    metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
+    metadata: ClassVar[dict[str, Any]] = {"render_modes": ["rgb_array"], "render_fps": 10}
 
     def __init__(self, config: GridConfig | None = None):
         super().__init__()
@@ -75,10 +75,14 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
                 return True
             for dx, dy in DELTAS[:4]:
                 xx, yy = x + dx, y + dy
-                if 0 <= xx < n and 0 <= yy < n and not blocked[yy, xx]:
-                    if (xx, yy) not in seen:
-                        seen.add((xx, yy))
-                        queue.append((xx, yy))
+                if (
+                    0 <= xx < n
+                    and 0 <= yy < n
+                    and not blocked[yy, xx]
+                    and (xx, yy) not in seen
+                ):
+                    seen.add((xx, yy))
+                    queue.append((xx, yy))
         return False
 
     def _random_layout(self) -> tuple[np.ndarray, np.ndarray, tuple[int, int], tuple[int, int]]:
