@@ -98,7 +98,7 @@ class MapCanvas(QWidget):
         )
         painter.end()
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt API)
+    def mousePressEvent(self, event) -> None:
         if not self.truth or self.on_edit is None:
             return
         left, top, cell = self._geometry()
@@ -279,7 +279,7 @@ class MainWindow(QMainWindow):
         if terminated or truncated:
             self._stop()
 
-    def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt API)
+    def keyPressEvent(self, event) -> None:
         if self.mode.currentIndex() == 1:
             key_to_action = {
                 Qt.Key.Key_Up: 0, Qt.Key.Key_Down: 1,
