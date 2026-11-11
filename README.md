@@ -54,4 +54,4 @@ See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya adapter, PPO training, and mo
 
 ## License
 
-MIT.
+No license has been selected. Repository remains private.
