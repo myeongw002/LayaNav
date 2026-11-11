@@ -8,7 +8,6 @@ version = "0.1.0"
 description = "Partially observable grid navigation research with online mapping"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
 dependencies = [
     "numpy>=1.26,<3",
     "gymnasium>=1.0,<2",
