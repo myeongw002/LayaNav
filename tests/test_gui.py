@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
+
+pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 
 from layanav.gui.app import MainWindow
