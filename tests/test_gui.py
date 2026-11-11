@@ -11,8 +11,13 @@ from PySide6.QtWidgets import QApplication
 from layanav.gui.app import MainWindow
 
 
+# Keep the Qt application alive for the whole Python interpreter lifetime.
+# Qt widgets may otherwise outlive a locally-scoped QApplication during pytest teardown.
+_APP = QApplication.instance() or QApplication([])
+
+
 def test_gui_start_edit_step_and_reset():
-    app = QApplication.instance() or QApplication([])
+    app = _APP
     window = MainWindow()
     window.show()
     app.processEvents()
@@ -41,4 +46,5 @@ def test_gui_start_edit_step_and_reset():
     window._reset_same_map()
     assert window.env.debug_snapshot()["robot"] == window.start
     window.close()
+    window.deleteLater()
     app.processEvents()
