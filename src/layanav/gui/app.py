@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from layanav.envs import GridConfig, GridWorldEnv
+from layanav.envs.map_io import load_map, save_map
 from layanav.planners import OnlineAStarPolicy
 
 
@@ -111,7 +113,7 @@ class MapCanvas(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("LayaNav Studio — v0.1")
+        self.setWindowTitle("LayaNav Studio — v0.2-dev")
         self.resize(1040, 650)
         self.env = GridWorldEnv(GridConfig())
         self.env.reset(seed=42)
@@ -144,6 +146,13 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("Sensor radius:"))
         controls.addWidget(self.radius)
 
+        self.sensor_mode = QComboBox()
+        self.sensor_mode.addItem("Circle (ideal)", "circle")
+        self.sensor_mode.addItem("Raycast (occluded)", "raycast")
+        self.sensor_mode.currentIndexChanged.connect(self._change_sensor_mode)
+        controls.addWidget(QLabel("Sensor:"))
+        controls.addWidget(self.sensor_mode)
+
         self.play_button = QPushButton("Play")
         self.play_button.clicked.connect(self._toggle_play)
         controls.addWidget(self.play_button)
@@ -156,6 +165,12 @@ class MainWindow(QMainWindow):
         new_button = QPushButton("New map")
         new_button.clicked.connect(self._new_map)
         controls.addWidget(new_button)
+        save_button = QPushButton("Save map")
+        save_button.clicked.connect(self._save_map_dialog)
+        controls.addWidget(save_button)
+        load_button = QPushButton("Load map")
+        load_button.clicked.connect(self._load_map_dialog)
+        controls.addWidget(load_button)
 
         maps = QHBoxLayout()
         root.addLayout(maps, 1)
@@ -190,6 +205,64 @@ class MainWindow(QMainWindow):
     def _change_radius(self, value: int) -> None:
         self.env.config.observation_radius = value
         self._reset_same_map()
+
+    def _change_sensor_mode(self, index: int) -> None:
+        self.env.config.sensor_mode = self.sensor_mode.itemData(index)
+        self._reset_same_map()
+
+    def _save_map(self, path: str) -> None:
+        snap = self.env.debug_snapshot()
+        save_map(
+            path,
+            {
+                "static_map": snap["static_map"],
+                "hidden_obstacles": snap["hidden_obstacles"],
+                "start": self.start,
+                "goal": snap["goal"],
+            },
+        )
+
+    def _save_map_dialog(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save simulator map", "", "LayaNav maps (*.json)"
+        )
+        if path:
+            try:
+                self._save_map(path)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "Map save failed", str(exc))
+
+    def _load_map(self, path: str) -> None:
+        layout = load_map(path)
+        size = layout["static_map"].shape[0]
+        config = GridConfig(
+            size=size,
+            observation_radius=self.radius.value(),
+            sensor_mode=self.sensor_mode.currentData(),
+            hidden_obstacle_count=min(24, (size - 2) ** 2 // 8),
+            known_wall_segments=min(5, size // 2),
+            max_steps=self.env.config.max_steps,
+        )
+        candidate = GridWorldEnv(config)
+        candidate.reset(options=layout)
+        self._stop()
+        self.env = candidate
+        self.truth_canvas.env = candidate
+        self.belief_canvas.env = candidate
+        self.start = layout["start"]
+        self.policy = OnlineAStarPolicy()
+        self.total_reward = 0.0
+        self._update_view()
+
+    def _load_map_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open simulator map", "", "LayaNav maps (*.json)"
+        )
+        if path:
+            try:
+                self._load_map(path)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "Map load failed", str(exc))
 
     def _reset_same_map(self) -> None:
         self._stop()
@@ -306,7 +379,8 @@ class MainWindow(QMainWindow):
             f"Step {snap['step']}/{self.env.config.max_steps} | "
             f"position {snap['robot']} | goal {snap['goal']} | "
             f"reward {self.total_reward:.2f} | "
-            f"discovered {int(snap['discovered_obstacles'].sum())}"
+            f"discovered {int(snap['discovered_obstacles'].sum())} | "
+            f"sensor {self.env.config.sensor_mode}"
             + suffix
         )
 
