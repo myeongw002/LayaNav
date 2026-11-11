@@ -5,18 +5,17 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-pytest.importorskip("PySide6")
-from PySide6.QtWidgets import QApplication
-
-from layanav.gui.app import MainWindow
+QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 
 
 # Keep the Qt application alive for the whole Python interpreter lifetime.
 # Qt widgets may otherwise outlive a locally-scoped QApplication during pytest teardown.
-_APP = QApplication.instance() or QApplication([])
+_APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
 def test_gui_start_edit_step_and_reset():
+    from layanav.gui.app import MainWindow
+
     app = _APP
     window = MainWindow()
     window.show()
