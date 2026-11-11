@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -43,7 +42,7 @@ class MapCanvas(QWidget):
         size = width / n
         return (self.width() - width) / 2, (self.height() - width) / 2, size
 
-    def paintEvent(self, event) -> None:  # noqa: N802 (Qt API)
+    def paintEvent(self, event) -> None:
         state = self.env.debug_snapshot()
         prior, hidden = state["static_map"], state["hidden_obstacles"]
         discovered, unknown = state["discovered_obstacles"], state["unknown"]
@@ -55,9 +54,9 @@ class MapCanvas(QWidget):
             for x in range(n):
                 if prior[y, x]:
                     fill = "#65748b"
-                elif self.truth and hidden[y, x]:
-                    fill = "#df765b"
-                elif not self.truth and discovered[y, x]:
+                elif (self.truth and hidden[y, x]) or (
+                    not self.truth and discovered[y, x]
+                ):
                     fill = "#df765b"
                 elif not self.truth and unknown[y, x]:
                     fill = "#48525e"
@@ -199,17 +198,13 @@ class MainWindow(QMainWindow):
             options={
                 "static_map": snap["static_map"],
                 "hidden_obstacles": snap["hidden_obstacles"],
-                "start": snap["robot"] if False else self._initial_start(),
+                "start": self.start,
                 "goal": snap["goal"],
             }
         )
         self.total_reward = 0.0
         self.policy = OnlineAStarPolicy()
         self._update_view()
-
-    def _initial_start(self) -> tuple[int, int]:
-        # Original start is held separately from the robot's current position.
-        return self.start
 
     def _new_map(self) -> None:
         self._stop()
