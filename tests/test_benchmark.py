@@ -142,3 +142,25 @@ def test_apf_benchmark_same_seeds_and_configuration(tmp_path):
     assert seeds_by_method["astar"] == seeds_by_method["apf"] == {
         27001, 27002, 27003,
     }
+
+
+def test_paired_4way_vs_8way_weighted_path_metrics(tmp_path):
+    for mode in (4, 8):
+        report = benchmark(
+            methods=("astar", "apf"), families=("sparse",),
+            episodes=2, eval_seed=44441, size=9, radius=3, sensor="circle",
+            max_steps=40, movement_mode=mode, oracle_diagnostic=True,
+            output_dir=tmp_path / str(mode), bootstrap_replicates=100,
+        )
+        assert report["protocol"]["movement_mode"] == mode
+        with (tmp_path / str(mode) / "episodes.csv").open(
+            encoding="utf-8", newline=""
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+        assert len(rows) == 4
+        assert all(float(row["distance_traveled"]) >= 0 for row in rows)
+        for row in rows:
+            if row["success"] == "True":
+                assert 0 < float(row["oracle_efficiency"]) <= 1.0000001
+            if mode == 4:
+                assert float(row["distance_traveled"]) == float(row["moves"])
