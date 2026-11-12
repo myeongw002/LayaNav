@@ -69,7 +69,7 @@ def test_u_shape_requires_detour():
     assert route
     straight = math.dist(state["robot"], state["goal"])
     actual = sum(math.dist(a, b) for a, b in pairwise(route))
-    assert actual > 3 * straight
+    assert actual > straight + 2.0
 
 
 @pytest.mark.parametrize("topology", ("maze", "corridor", "rooms", "u_shape", "cluttered"))

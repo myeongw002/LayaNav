@@ -90,15 +90,25 @@ def _rotated_coordinate(
 def _u_shape(
     n: int, rng: np.random.Generator,
 ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
-    """Concave obstacle, with start inside and goal across its closed end."""
+    """Concave barrier with varied in-cavity start and beyond-wall goal."""
     wall = _empty_walls(n)
     left, right = max(2, n // 3), min(n - 3, 2 * n // 3)
     top, bottom = max(2, n // 4), min(n - 3, 3 * n // 4)
     wall[top:bottom + 1, left] = True
     wall[top:bottom + 1, right] = True
     wall[bottom, left:right + 1] = True
-    middle_x = (left + right) // 2
-    start, goal = (middle_x, bottom - 1), (middle_x, bottom + 1)
+    # Sample positions inside the concavity and beyond the closed wall.
+    # Both remain on opposite sides of the barrier, but direct distances
+    # and required detours now vary across seeds. In small grids the range
+    # naturally shrinks, while retaining at least one valid cell.
+    start = (
+        int(rng.integers(left + 1, right)),
+        int(rng.integers(top + 1, bottom)),
+    )
+    goal = (
+        int(rng.integers(left + 1, right)),
+        int(rng.integers(bottom + 1, min(n - 1, bottom + 4))),
+    )
     quarters = int(rng.integers(4))
     return (
         np.rot90(wall, quarters).copy(),
