@@ -24,6 +24,7 @@ DIFFICULTY_METRICS = (
     "straight_line_distance",
     "path_tortuosity",
     "minimum_clearance",
+    "mean_path_clearance",
     "dead_end_count",
     "reachable_free_cells",
 )
@@ -123,11 +124,14 @@ def measure_map_difficulty(
         raise ValueError("No non-prior-wall cells")
     obstacle_y, obstacle_x = np.nonzero(blocked)
     clearance: float | None = None
+    mean_clearance: float | None = None
     if obstacle_x.size:
-        clearance = min(
+        path_clearances = [
             math.sqrt(float(np.min((obstacle_x - x) ** 2 + (obstacle_y - y) ** 2)))
             for x, y in path
-        )
+        ]
+        clearance = min(path_clearances)
+        mean_clearance = float(np.mean(path_clearances))
     reachable_count, dead_ends = _reachable_graph(blocked, start, movement_mode)
     return {
         "obstacle_density": float(blocked.mean()),
@@ -137,6 +141,7 @@ def measure_map_difficulty(
         "straight_line_distance": direct,
         "path_tortuosity": optimal / direct,
         "minimum_clearance": clearance,
+        "mean_path_clearance": mean_clearance,
         "dead_end_count": dead_ends,
         "reachable_free_cells": reachable_count,
     }

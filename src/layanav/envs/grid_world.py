@@ -15,7 +15,11 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from layanav.envs.map_generation import MAP_TOPOLOGIES, generate_structured_layout
+from layanav.envs.map_generation import (
+    MAP_TOPOLOGIES,
+    _distances,
+    generate_structured_layout,
+)
 from layanav.envs.map_io import validate_layout
 from layanav.envs.sensor import SensorMode, visibility_mask
 
@@ -66,6 +70,8 @@ class GridConfig:
     max_steps: int = 256
     known_wall_segments: int = 5
     topology: str = "random"
+    min_route_steps: int | None = None
+    max_route_steps: int | None = None
 
     def __post_init__(self) -> None:
         if self.size < 5:
@@ -83,6 +89,16 @@ class GridConfig:
             raise ValueError("obstacle counts must be nonnegative")
         if self.max_steps < 1:
             raise ValueError("max_steps must be >= 1")
+        for name in ("min_route_steps", "max_route_steps"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or value < 1):
+                raise ValueError(f"{name} must be a positive integer or None")
+        if (
+            self.min_route_steps is not None
+            and self.max_route_steps is not None
+            and self.min_route_steps > self.max_route_steps
+        ):
+            raise ValueError("min_route_steps cannot exceed max_route_steps")
 
 
 class GridWorldEnv(gym.Env[np.ndarray, int]):
@@ -173,6 +189,20 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
                 locations = available[selected]
                 hidden[locations[:, 0], locations[:, 1]] = True
             if self._reachable(prior | hidden, start, goal, self.config.movement_mode):
+                if self.config.min_route_steps is not None or (
+                    self.config.max_route_steps is not None
+                ):
+                    route_steps = _distances(
+                        prior | hidden, start, self.config.movement_mode
+                    )[goal]
+                    if (
+                        self.config.min_route_steps is not None
+                        and route_steps < self.config.min_route_steps
+                    ) or (
+                        self.config.max_route_steps is not None
+                        and route_steps > self.config.max_route_steps
+                    ):
+                        continue
                 return prior, hidden, start, goal
         raise RuntimeError("Unable to generate a solvable map; reduce obstacle density")
 

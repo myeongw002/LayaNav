@@ -99,6 +99,56 @@ effect of any one complexity metric. The U-Shape generator now varies
 start and goal positions across the closed barrier; prior U-Shape maps
 with identical seeds are not comparable across code revisions.
 
+## Structured generator v2: constrained map sampling
+
+The generator samples start/goal on the prior topology before hidden blockers.
+For each structured map instance, hidden cells are selected by removing leaves
+from a cardinal spanning tree rooted at start (while preserving the goal).
+The remaining prior-reachable component stays connected under 4-way and 8-way
+(no diagonal corner cutting) motion. With fixed prior geometry/start/goal and
+nested obstacle placements, increasing hidden occupancy cannot reduce shortest
+true-map path length. The diagnostic `prior_layout_sha256` hashes the
+known-wall layer and start/goal (with an empty hidden layer), allowing
+cross-density verification of the common prior scenario, while
+`map_sha256` identifies the complete physical map.
+
+**Important limitations:**
+
+- A fully tree-structured Maze may become *less extensive* when leaf branches
+  are blocked, but the start-goal route can stay unchanged. Increasing hidden
+  density is therefore not equivalent to increasing navigation difficulty.
+- Cluttered map structural walls depend on family wall-segment counts and do
+  not share a single underlying prior map.
+- Custom `--max-route-steps` may require different generated instances across
+  family densities, preventing same-seed nesting.
+- Generator v2 changes previous structured seed layouts. Report the generator
+  version, seed, config and code revision for all comparisons. Never compare
+  v1 and v2 same-seed structured maps as though identical.
+
+Route bounds `min_route_steps` and `max_route_steps` are **integer
+shortest-path action counts** under the active 4/8-way graph, not weighted
+geometric distance. For structured maps the pair is chosen on the prior;
+the final map must still meet any explicitly requested upper bound.
+Impossible constraints throw an error, rather than relaxing counts.
+
+## Tortuosity-based evaluation groups
+
+With `--oracle-diagnostic`, `episodes.csv` contains a descriptive
+`tortuosity_bin`. The new `tortuosity_groups.csv` reports
+method/topology/family-specific success rates with Wilson CIs and SPL
+bootstrap CIs for three fixed, **heuristic** ranges:
+
+- `direct`: optimal-path tortuosity < 1.25.
+- `moderate_detour`: 1.25 ≤ tortuosity < 2.
+- `large_detour`: tortuosity ≥ 2.
+
+Empty groups have `episodes = 0` and null statistics. The bin is defined
+using true-map shortest route geometry, **not** the executed policy path,
+and is never a policy input. Small-group intervals will be broad. The
+additional `mean_path_clearance` is mean Euclidean cell-center distance
+to nearest blocked cell along the optimal route; it does **not** represent
+physical robot clearance.
+
 ## Separation and fairness
 
 Use a disjoint set of map seeds for BC train, BC validation and benchmark. PPO stores the seed of its training RNG; evaluation uses a far-removed, explicitly recorded seed sequence. This does **not** mathematically guarantee distinct generated layouts, especially for small grids; choose nontrivial map families and consider checksums of generated maps in a future protocol extension.

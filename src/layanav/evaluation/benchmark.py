@@ -21,6 +21,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv, action_count
+from layanav.envs.map_generation import MAP_GENERATOR_VERSION
 from layanav.evaluation.difficulty import (
     DIFFICULTY_METRICS,
     map_fingerprint,
@@ -28,6 +29,23 @@ from layanav.evaluation.difficulty import (
 )
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder
+
+# Descriptive stratification only; these are heuristic bins, not calibrated difficulty.
+TORTUOSITY_BINS = ("direct", "moderate_detour", "large_detour")
+TORTUOSITY_THRESHOLDS = (1.25, 2.0)
+
+
+def tortuosity_bin(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if not math.isfinite(value) or value < 1 - 1e-9:
+        raise ValueError("path_tortuosity must be finite and >= 1")
+    if value < TORTUOSITY_THRESHOLDS[0]:
+        return "direct"
+    if value < TORTUOSITY_THRESHOLDS[1]:
+        return "moderate_detour"
+    return "large_detour"
+
 
 FAMILIES = ("sparse", "standard", "dense")
 FAMILY_LAYOUTS = {
@@ -41,7 +59,9 @@ REPORT_FIELDS = (
     "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
     "termination_reason", "failure_reason", "last_policy_status",
     "stay_steps", "max_consecutive_stay", "revisits",
-    "goal_distance_remaining", "failure_trace", "map_sha256", "spl",
+    "goal_distance_remaining", "failure_trace", "map_sha256",
+    "prior_layout_sha256", "spl",
+    "tortuosity_bin",
     *DIFFICULTY_METRICS,
 )
 
@@ -74,6 +94,8 @@ def make_family_config(
     max_steps: int,
     movement_mode: int = 4,
     topology: str = "random",
+    min_route_steps: int | None = None,
+    max_route_steps: int | None = None,
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -90,6 +112,8 @@ def make_family_config(
         max_steps=max_steps,
         movement_mode=movement_mode,
         topology=topology,
+        min_route_steps=min_route_steps,
+        max_route_steps=max_route_steps,
     )
 
 
@@ -125,6 +149,7 @@ def run_episode(
     oracle_moves: int | None = None
     oracle_distance: float | None = None
     map_sha256: str | None = None
+    prior_layout_sha256: str | None = None
     difficulty: dict[str, float | int | None] = {
         metric: None for metric in DIFFICULTY_METRICS
     }
@@ -138,6 +163,10 @@ def run_episode(
         oracle_moves = len(path) - 1 if path else None
         map_sha256 = map_fingerprint(
             truth["static_map"], truth["hidden_obstacles"],
+            truth["robot"], truth["goal"], env.config.movement_mode,
+        )
+        prior_layout_sha256 = map_fingerprint(
+            truth["static_map"], np.zeros_like(truth["hidden_obstacles"]),
             truth["robot"], truth["goal"], env.config.movement_mode,
         )
         if path:
@@ -230,7 +259,9 @@ def run_episode(
         "oracle_efficiency": efficiency,
         "spl": spl,
         "map_sha256": map_sha256,
+        "prior_layout_sha256": prior_layout_sha256,
         **difficulty,
+        "tortuosity_bin": tortuosity_bin(difficulty["path_tortuosity"]),
         "termination_reason": "goal_reached" if success else "time_limit",
         "failure_reason": failure_reason,
         "last_policy_status": last_policy_status,
@@ -354,6 +385,8 @@ def benchmark(
     bootstrap_replicates: int = 2000,
     save_failures: bool = True,
     topologies: tuple[str, ...] = ("random",),
+    min_route_steps: int | None = None,
+    max_route_steps: int | None = None,
 ) -> dict[str, Any]:
     """Generate per-episode CSV plus JSON summary over paired held-out map seeds."""
     if episodes < 1 or eval_seed < 0:
@@ -382,6 +415,8 @@ def benchmark(
             family, size=size, radius=radius, sensor=sensor,
             max_steps=max_steps, movement_mode=movement_mode,
             topology=topology,
+            min_route_steps=min_route_steps,
+            max_route_steps=max_route_steps,
         )
         for topology in topologies
         for family in families
@@ -406,6 +441,7 @@ def benchmark(
 
     rows: list[dict[str, Any]] = []
     summaries: dict[str, Any] = {}
+    tortuosity_rows: list[dict[str, Any]] = []
     for (topology, family), config in configurations.items():
         env = GridWorldEnv(config)
         try:
@@ -465,6 +501,37 @@ def benchmark(
                             successful, seed=bootstrap_seed, replicates=bootstrap_replicates
                         ) if successful.size else None
                     )
+                summary["tortuosity_groups"] = {}
+                if oracle_diagnostic:
+                    for band in TORTUOSITY_BINS:
+                        subset = [
+                            row for row in episode_rows if row["tortuosity_bin"] == band
+                        ]
+                        n = len(subset)
+                        success_stats = (
+                            wilson_success_ci(np.asarray([
+                                float(row["success"]) for row in subset
+                            ], dtype=np.float64)) if n else None
+                        )
+                        spl_stats = (
+                            bootstrap_mean_ci(np.asarray([
+                                float(row["spl"]) for row in subset
+                            ], dtype=np.float64), seed=bootstrap_seed,
+                                replicates=bootstrap_replicates) if n else None
+                        )
+                        summary["tortuosity_groups"][band] = {
+                            "episodes": n, "success": success_stats, "spl": spl_stats,
+                        }
+                        tortuosity_rows.append({
+                            "topology": topology, "family": family, "method": method,
+                            "tortuosity_bin": band, "episodes": n,
+                            "success_rate": success_stats["mean"] if n else None,
+                            "success_ci_low": success_stats["ci_low"] if n else None,
+                            "success_ci_high": success_stats["ci_high"] if n else None,
+                            "spl_mean": spl_stats["mean"] if n else None,
+                            "spl_ci_low": spl_stats["ci_low"] if n else None,
+                            "spl_ci_high": spl_stats["ci_high"] if n else None,
+                        })
                 summary["failure_reasons"] = {
                     reason: sum(row["failure_reason"] == reason for row in episode_rows)
                     for reason in sorted({
@@ -487,6 +554,19 @@ def benchmark(
         writer = csv.DictWriter(file, fieldnames=REPORT_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
+
+    if oracle_diagnostic:
+        with (output / "tortuosity_groups.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            fields = (
+                "topology", "family", "method", "tortuosity_bin", "episodes",
+                "success_rate", "success_ci_low", "success_ci_high",
+                "spl_mean", "spl_ci_low", "spl_ci_high",
+            )
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(tortuosity_rows)
 
     checkpoint_details: dict[str, Any] = {}
     for method in ("bc", "ppo", "laya"):
@@ -517,6 +597,14 @@ def benchmark(
             "paired_map_seeds": True,
             "save_failure_traces": save_failures,
             "topologies": list(topologies),
+            "structured_map_generator_version": MAP_GENERATOR_VERSION,
+            "route_bounds_are_graph_steps": True,
+            "tortuosity_bins": {
+                "direct": "T < 1.25",
+                "moderate_detour": "1.25 <= T < 2.0",
+                "large_detour": "T >= 2.0",
+            },
+            "tortuosity_bins_are_heuristic": True,
             "failure_reason_is_diagnostic": True,
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
@@ -536,6 +624,7 @@ def benchmark(
                 "straight_line_distance": "Euclidean start-to-goal distance",
                 "path_tortuosity": "shortest geometric route / straight-line distance",
                 "minimum_clearance": "minimum path-to-obstacle center distance in cells",
+                "mean_path_clearance": "mean path-to-obstacle center distance in cells",
                 "dead_end_count": "degree-one cells in start-reachable true-map component",
                 "reachable_free_cells": "number of start-reachable true-map free cells",
             },
