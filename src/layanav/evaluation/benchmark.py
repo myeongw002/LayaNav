@@ -59,7 +59,8 @@ REPORT_FIELDS = (
     "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
     "termination_reason", "failure_reason", "last_policy_status",
     "stay_steps", "max_consecutive_stay", "revisits",
-    "goal_distance_remaining", "failure_trace", "map_sha256", "spl",
+    "goal_distance_remaining", "failure_trace", "map_sha256",
+    "prior_layout_sha256", "spl",
     "tortuosity_bin",
     *DIFFICULTY_METRICS,
 )
@@ -148,6 +149,7 @@ def run_episode(
     oracle_moves: int | None = None
     oracle_distance: float | None = None
     map_sha256: str | None = None
+    prior_layout_sha256: str | None = None
     difficulty: dict[str, float | int | None] = {
         metric: None for metric in DIFFICULTY_METRICS
     }
@@ -161,6 +163,10 @@ def run_episode(
         oracle_moves = len(path) - 1 if path else None
         map_sha256 = map_fingerprint(
             truth["static_map"], truth["hidden_obstacles"],
+            truth["robot"], truth["goal"], env.config.movement_mode,
+        )
+        prior_layout_sha256 = map_fingerprint(
+            truth["static_map"], np.zeros_like(truth["hidden_obstacles"]),
             truth["robot"], truth["goal"], env.config.movement_mode,
         )
         if path:
@@ -253,6 +259,7 @@ def run_episode(
         "oracle_efficiency": efficiency,
         "spl": spl,
         "map_sha256": map_sha256,
+        "prior_layout_sha256": prior_layout_sha256,
         **difficulty,
         "tortuosity_bin": tortuosity_bin(difficulty["path_tortuosity"]),
         "termination_reason": "goal_reached" if success else "time_limit",
