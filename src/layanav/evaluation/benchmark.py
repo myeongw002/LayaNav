@@ -186,6 +186,11 @@ def _create_policy(method: str, checkpoint: str | Path | None, device: str) -> N
         from layanav.training.ppo import load_ppo_policy
 
         return load_ppo_policy(checkpoint, device=device)
+    if method == "laya":
+        from layanav.training.laya_bc import load_laya_adapter
+
+        model, _ = load_laya_adapter(checkpoint, device=device)
+        return BCPolicyAdapter(model)
     raise ValueError(f"Unknown benchmark method: {method}")
 
 
@@ -202,6 +207,7 @@ def benchmark(
     output_dir: str | Path,
     bc_checkpoint: str | Path | None = None,
     ppo_checkpoint: str | Path | None = None,
+    laya_checkpoint: str | Path | None = None,
     device: str = "cpu",
     oracle_diagnostic: bool = False,
     bootstrap_seed: int = 2026,
@@ -214,11 +220,11 @@ def benchmark(
         raise ValueError("methods must be nonempty and unique")
     if not families or len(set(families)) != len(families):
         raise ValueError("families must be nonempty and unique")
-    if set(methods) - {"astar", "bc", "ppo"}:
+    if set(methods) - {"astar", "bc", "ppo", "laya"}:
         raise ValueError("Unknown benchmark method")
     if set(families) - set(FAMILIES):
         raise ValueError("Unknown map family")
-    checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint}
+    checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint, "laya": laya_checkpoint}
     policies = {method: _create_policy(method, checkpoints.get(method), device) for method in methods}
     configurations = {
         family: make_family_config(
@@ -277,7 +283,7 @@ def benchmark(
         writer.writerows(rows)
 
     checkpoint_details: dict[str, Any] = {}
-    for method in ("bc", "ppo"):
+    for method in ("bc", "ppo", "laya"):
         checkpoint = checkpoints[method]
         if method in methods and checkpoint is not None:
             checkpoint_details[method] = {
@@ -288,6 +294,16 @@ def benchmark(
                 from layanav.training.ppo import load_ppo_metadata
 
                 checkpoint_details[method]["training"] = load_ppo_metadata(checkpoint)
+            if method == "laya":
+                import torch
+
+                saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
+                checkpoint_details[method]["training"] = {
+                    "source": saved["source"],
+                    "epoch": saved["epoch"],
+                    "training_seed": saved["training_seed"],
+                    "best_val_loss": saved["best_val_loss"],
+                }
 
     report: dict[str, Any] = {
         "schema_version": 1,
