@@ -25,7 +25,9 @@
 - [x] Ray-cast occlusion sensor; document partial-observability assumptions
 - [x] Versioned JSON map load/save with validation (including GUI)
 - [ ] Map-generation presets
-- [ ] GUI path overlays, richer runtime diagnostics, episode recording/replay
+- [x] GUI path overlay, visited trajectory and adjustable simulation speed
+- [x] Deterministic episode JSON recorder and verified replay in GUI
+- [ ] Richer diagnostics, replay seek/scrub and map-generation presets
 - Robust evaluation suite across controlled map difficulty and seeds
 
 ## Milestone v0.3 — classical and neural baselines
