@@ -309,9 +309,18 @@ def generate_structured_layout(
         if config.hidden_obstacle_count > len(_distances(prior, start, 4)) - 2:
             # Only cells that preserve cardinal connectivity are eligible.
             continue
-        hidden = _connected_hidden_obstacles(
-            prior, start, goal, config.hidden_obstacle_count, rng,
-        )
+        try:
+            hidden = _connected_hidden_obstacles(
+                prior, start, goal, config.hidden_obstacle_count, rng,
+            )
+        except RuntimeError:
+            # The selected pair protected nearly the whole spanning tree.
+            # Resample rather than silently reducing hidden obstacle count.
+            continue
+        if upper is not None:
+            final_steps = _distances(prior | hidden, start, config.movement_mode)[goal]
+            if final_steps > upper:
+                continue
         return prior, hidden, start, goal
     raise RuntimeError(
         "Unable to meet structured map route/size constraints "
