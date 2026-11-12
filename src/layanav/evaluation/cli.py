@@ -29,6 +29,9 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--min-route-steps", type=int)
     parser.add_argument("--max-route-steps", type=int)
+    parser.add_argument("--maze-loops", type=int)
+    parser.add_argument("--replanning-mode", choices=["off", "required"], default="off")
+    parser.add_argument("--oracle-step-reserve", type=int)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--apf-attractive-gain", type=float, default=1.0)
     parser.add_argument("--apf-repulsive-gain", type=float, default=8.0)
@@ -47,6 +50,9 @@ def main() -> None:
             topologies=tuple(args.topologies),
             min_route_steps=args.min_route_steps,
             max_route_steps=args.max_route_steps,
+            maze_loop_count=args.maze_loops,
+            replanning_mode=args.replanning_mode,
+            oracle_step_reserve=args.oracle_step_reserve,
             episodes=args.episodes,
             eval_seed=args.eval_seed,
             size=args.grid_size,

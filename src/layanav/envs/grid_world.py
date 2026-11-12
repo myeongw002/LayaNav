@@ -72,6 +72,9 @@ class GridConfig:
     topology: str = "random"
     min_route_steps: int | None = None
     max_route_steps: int | None = None
+    maze_loop_count: int | None = None
+    replanning_mode: str = "off"
+    oracle_step_reserve: int | None = None
 
     def __post_init__(self) -> None:
         if self.size < 5:
@@ -99,6 +102,23 @@ class GridConfig:
             and self.min_route_steps > self.max_route_steps
         ):
             raise ValueError("min_route_steps cannot exceed max_route_steps")
+        if self.maze_loop_count is not None and (
+            type(self.maze_loop_count) is not int or self.maze_loop_count < 0
+        ):
+            raise ValueError("maze_loop_count must be a nonnegative integer or None")
+        if self.replanning_mode not in ("off", "required"):
+            raise ValueError("replanning_mode must be 'off' or 'required'")
+        if self.replanning_mode == "required":
+            if self.topology == "random":
+                raise ValueError("Required replanning needs a structured topology")
+            if self.hidden_obstacle_count == 0:
+                raise ValueError("Required replanning needs hidden obstacles")
+        if self.oracle_step_reserve is not None and (
+            type(self.oracle_step_reserve) is not int
+            or self.oracle_step_reserve < 0
+            or self.oracle_step_reserve >= self.max_steps
+        ):
+            raise ValueError("oracle_step_reserve must be in [0, max_steps)")
 
 
 class GridWorldEnv(gym.Env[np.ndarray, int]):

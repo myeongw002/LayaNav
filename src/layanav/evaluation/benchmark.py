@@ -96,6 +96,9 @@ def make_family_config(
     topology: str = "random",
     min_route_steps: int | None = None,
     max_route_steps: int | None = None,
+    maze_loop_count: int | None = None,
+    replanning_mode: str = "off",
+    oracle_step_reserve: int | None = None,
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -114,6 +117,9 @@ def make_family_config(
         topology=topology,
         min_route_steps=min_route_steps,
         max_route_steps=max_route_steps,
+        maze_loop_count=maze_loop_count,
+        replanning_mode=replanning_mode,
+        oracle_step_reserve=oracle_step_reserve,
     )
 
 
@@ -387,6 +393,9 @@ def benchmark(
     topologies: tuple[str, ...] = ("random",),
     min_route_steps: int | None = None,
     max_route_steps: int | None = None,
+    maze_loop_count: int | None = None,
+    replanning_mode: str = "off",
+    oracle_step_reserve: int | None = None,
 ) -> dict[str, Any]:
     """Generate per-episode CSV plus JSON summary over paired held-out map seeds."""
     if episodes < 1 or eval_seed < 0:
@@ -417,6 +426,9 @@ def benchmark(
             topology=topology,
             min_route_steps=min_route_steps,
             max_route_steps=max_route_steps,
+            maze_loop_count=maze_loop_count,
+            replanning_mode=replanning_mode,
+            oracle_step_reserve=oracle_step_reserve,
         )
         for topology in topologies
         for family in families
@@ -598,6 +610,9 @@ def benchmark(
             "save_failure_traces": save_failures,
             "topologies": list(topologies),
             "structured_map_generator_version": MAP_GENERATOR_VERSION,
+            "replanning_mode": replanning_mode,
+            "maze_loop_count": maze_loop_count,
+            "oracle_step_reserve": oracle_step_reserve,
             "route_bounds_are_graph_steps": True,
             "tortuosity_bins": {
                 "direct": "T < 1.25",

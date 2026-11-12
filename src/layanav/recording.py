@@ -51,6 +51,9 @@ class EpisodeRecorder:
             "topology": env.config.topology,
             "min_route_steps": env.config.min_route_steps,
             "max_route_steps": env.config.max_route_steps,
+            "maze_loop_count": env.config.maze_loop_count,
+            "replanning_mode": env.config.replanning_mode,
+            "oracle_step_reserve": env.config.oracle_step_reserve,
         }
         self.action_count = env.action_space.n
         self.initial_digest = _observation_digest(env.observe())
@@ -149,6 +152,9 @@ class ReplaySession:
                 topology=config.get("topology", "random"),
                 min_route_steps=config.get("min_route_steps"),
                 max_route_steps=config.get("max_route_steps"),
+                maze_loop_count=config.get("maze_loop_count"),
+                replanning_mode=config.get("replanning_mode", "off"),
+                oracle_step_reserve=config.get("oracle_step_reserve"),
             )
             steps = trace["steps"]
             if not isinstance(steps, list) or len(steps) > max_steps:

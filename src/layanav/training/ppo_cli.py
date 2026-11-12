@@ -31,6 +31,9 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--min-route-steps", type=int)
     parser.add_argument("--max-route-steps", type=int)
+    parser.add_argument("--maze-loops", type=int)
+    parser.add_argument("--replanning-mode", choices=["off", "required"], default="off")
+    parser.add_argument("--oracle-step-reserve", type=int)
     args = parser.parse_args()
 
     from layanav.training.ppo import PPOSettings, train_ppo
@@ -43,6 +46,9 @@ def main() -> None:
         topology=args.topology,
         min_route_steps=args.min_route_steps,
         max_route_steps=args.max_route_steps,
+        maze_loop_count=args.maze_loops,
+        replanning_mode=args.replanning_mode,
+        oracle_step_reserve=args.oracle_step_reserve,
         hidden_obstacle_count=args.hidden_obstacles,
         known_wall_segments=args.wall_segments,
         max_steps=args.max_steps,
