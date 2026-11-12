@@ -141,4 +141,4 @@ def test_benchmark_prior_layout_hashes_match_across_structured_density(tmp_path)
             assert len(matches) == 3
             assert len({row["prior_layout_sha256"] for row in matches}) == 1
             assert len({row["map_sha256"] for row in matches}) == 3
-    assert report["protocol"]["structured_map_generator_version"] == 2
+    assert report["protocol"]["structured_map_generator_version"] == 3
