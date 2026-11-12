@@ -42,16 +42,18 @@
 
 ## Milestone v0.4 — Laya spatial adaptation
 
-- Verify upstream Laya model structure/weights and licensing
-- Numeric/spatial encoder: 6-channel grid → spatial tokens
-- Adapter into pretrained Laya encoder and custom 5-action head
-- Frozen-encoder behavior cloning, logprobs, checkpointing
-- Test for gradient flow and absence of privileged state leakage
+- [x] Verify upstream Laya API, ModernBERT encoder access, package version and model license
+- [x] Numeric/spatial encoder: 6-channel grid → spatial tokens
+- [x] Adapter into Laya encoder interface and custom 5-action/critic heads (mock-backbone CI only)
+- [x] Frozen-encoder behavior cloning and adapter-only checkpointing
+- [ ] Real checkpoint RTX 5070 forward/backward, GPU memory/latency measurement
+- [ ] PPO logprobs and actor/critic training with spatial Laya
+- [x] Gradient tests and belief-only data path with tiny stand-in backbone
 
 ## Milestone v0.5 — training and research evaluation
 
 - PPO fine-tuning with suitable critic
-- Frozen / partial-unfreeze / random-init ablations
+- [ ] Frozen / partial-unfreeze / random-init ablations
 - Compare success, path length, collisions, speed and memory
 - Hold-out map families, different observation radii and sensor models
 - Dynamic obstacles only after stable static-obstacle baseline
