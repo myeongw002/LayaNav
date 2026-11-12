@@ -105,3 +105,40 @@ def test_family_presets_and_bad_benchmark_options(tmp_path):
             eval_seed=1, size=9, radius=2, sensor="circle", max_steps=20,
             output_dir=tmp_path,
         )
+
+
+def test_apf_benchmark_same_seeds_and_configuration(tmp_path):
+    from layanav.planners import APFConfig
+
+    report = benchmark(
+        methods=("astar", "apf"),
+        families=("sparse",),
+        episodes=3,
+        eval_seed=27001,
+        size=9,
+        radius=2,
+        sensor="raycast",
+        max_steps=25,
+        output_dir=tmp_path / "apf_run",
+        bootstrap_replicates=100,
+        apf_config=APFConfig(
+            attractive_gain=1.2, repulsive_gain=5.0,
+            influence_radius=3.0, unknown_penalty=0.0,
+        ),
+    )
+    assert report["summary"]["sparse/astar"]["success"]["n"] == 3
+    assert report["summary"]["sparse/apf"]["success"]["n"] == 3
+    assert report["apf_config"]["repulsive_gain"] == 5.0
+
+    with (tmp_path / "apf_run" / "episodes.csv").open(
+        encoding="utf-8", newline=""
+    ) as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 6
+    seeds_by_method = {
+        method: {int(row["seed"]) for row in rows if row["method"] == method}
+        for method in ("astar", "apf")
+    }
+    assert seeds_by_method["astar"] == seeds_by_method["apf"] == {
+        27001, 27002, 27003,
+    }

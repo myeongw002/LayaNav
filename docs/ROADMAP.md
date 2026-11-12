@@ -33,6 +33,7 @@
 ## Milestone v0.3 — classical and neural baselines
 
 - [x] Online A* / BC / PPO paired-seed benchmark and CSV/JSON reports
+- [x] Discrete Artificial Potential Field (APF) reactive baseline, GUI and paired-seed benchmark
 - [x] CNN+MLP imitation-learning policy, compact datasets, CLI and checkpoints
 - [x] CNN+PPO policy with Gymnasium-compatible custom spatial extractor
 - [ ] Optional recurrent PPO baseline

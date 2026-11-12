@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 
 from layanav.envs import GridConfig, GridWorldEnv
 from layanav.envs.map_io import load_map, save_map
-from layanav.planners import OnlineAStarPolicy
+from layanav.planners import ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder, ReplaySession
 
 
@@ -140,6 +140,7 @@ class MainWindow(QMainWindow):
         self.env = GridWorldEnv(GridConfig())
         self.env.reset(seed=42)
         self.policy = OnlineAStarPolicy()
+        self.apf_policy = ArtificialPotentialFieldPolicy()
         self.recorder: EpisodeRecorder | None = None
         self.replay: ReplaySession | None = None
         self.trail: list[tuple[int, int]] = []
@@ -155,7 +156,7 @@ class MainWindow(QMainWindow):
         root.addLayout(controls)
 
         self.mode = QComboBox()
-        self.mode.addItems(["Online A*", "Manual (arrow keys)", "Replay"])
+        self.mode.addItems(["Online A*", "Manual (arrow keys)", "Replay", "APF"])
         self.mode.currentIndexChanged.connect(self._mode_changed)
         controls.addWidget(QLabel("Policy:"))
         controls.addWidget(self.mode)
@@ -242,6 +243,7 @@ class MainWindow(QMainWindow):
 
     def _start_episode(self) -> None:
         self.replay = None
+        self.apf_policy = ArtificialPotentialFieldPolicy()
         self.recorder = EpisodeRecorder(self.env)
         if self.mode.currentIndex() == 2:
             self.mode.setCurrentIndex(0)
@@ -252,6 +254,7 @@ class MainWindow(QMainWindow):
         self.belief_canvas.path = []
 
     def _mode_changed(self, index: int) -> None:
+        self._stop()
         if self.replay is not None and index != 2:
             self._reset_same_map()
 
@@ -457,15 +460,25 @@ class MainWindow(QMainWindow):
         self.timer.start(max(20, round(1000 / self.speed.value())))
 
     def _tick(self) -> None:
-        if self.mode.currentIndex() == 2:
+        mode = self.mode.currentIndex()
+        if mode == 2:
             self._replay_step()
             return
-        if self.env._ended or self.mode.currentIndex() != 0:
+        if self.env._ended or mode not in (0, 3):
             self._stop()
             return
-        action = self.policy.act(self.env.observe())
-        self.belief_canvas.path = list(self.policy.last_path)
+        observation = self.env.observe()
+        if mode == 0:
+            action = self.policy.act(observation)
+            self.belief_canvas.path = list(self.policy.last_path)
+        else:
+            action = self.apf_policy.act(observation)
+            # APF is a reactive local controller, not a global path planner.
+            self.belief_canvas.path = []
         self._apply_action(action)
+        if mode == 3 and self.apf_policy.last_status in ("local_minimum", "blocked"):
+            # Keep the environment episode live, but stop endless STAY playback.
+            self._stop()
 
     def _replay_step(self) -> None:
         if self.replay is None or self.replay.finished:
@@ -518,6 +531,10 @@ class MainWindow(QMainWindow):
             suffix = " | collision" if info["collision"] else ""
             if info["success"]:
                 suffix = " | GOAL REACHED"
+        if self.mode.currentIndex() == 3 and self.apf_policy.last_status in (
+            "local_minimum", "blocked"
+        ):
+            suffix += " | APF stalled (local minimum / blocked)"
         self.status_label.setText(
             f"Step {snap['step']}/{self.env.config.max_steps} | "
             f"position {snap['robot']} | goal {snap['goal']} | "
