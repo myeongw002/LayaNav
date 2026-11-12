@@ -161,7 +161,7 @@ def bootstrap_mean_ci(
     half = (1 - confidence) / 2
     low, high = np.quantile(estimates, [half, 1 - half])
     return {
-        "mean": mean, "ci_low": float(low), "ci_high": float(high), "n": int(len(data)),
+        "mean": mean, "ci_low": float(low), "ci_high": float(high), "n": len(data),
     }
 
 
