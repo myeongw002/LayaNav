@@ -61,3 +61,23 @@ def test_bc_train_checkpoint_and_seed_split(tmp_path):
             output_checkpoint=checkpoint, epochs=1,
             channels=8, device="cpu"
         )
+
+
+def test_eight_way_cnn_bc_training_and_legacy_policy(tmp_path):
+    config = GridConfig(
+        size=9, movement_mode=8, observation_radius=2, sensor_mode="circle",
+        hidden_obstacle_count=0, known_wall_segments=0, max_steps=36,
+    )
+    train, _ = collect_expert_dataset(episodes=4, seed_start=100, config=config)
+    val, _ = collect_expert_dataset(episodes=2, seed_start=1000, config=config)
+    tr, va, checkpoint = tmp_path / "tr.npz", tmp_path / "va.npz", tmp_path / "cnn9.pt"
+    save_dataset(tr, train)
+    save_dataset(va, val)
+    train_behavior_cloning(
+        train_data=tr, validation_data=va, output_checkpoint=checkpoint,
+        epochs=1, batch_size=8, channels=8, device="cpu",
+    )
+    policy = load_policy(checkpoint)
+    assert policy.action_count == 9
+    assert policy(torch.zeros((1, 6, 9, 9))).shape == (1, 9)
+    assert CNNPolicy(channels=8).action_count == 5
