@@ -151,7 +151,14 @@ def test_success_spl_and_success_only_denominators(tmp_path):
     assert summary["successful_steps"]["n"] == 3
     assert summary["successful_moves"]["n"] == 3
     assert summary["successful_distance_traveled"]["n"] == 3
-    assert summary["spl"]["mean"] == pytest.approx(1, abs=1e-10)
+    assert 0 < summary["spl"]["mean"] <= 1
+    env = GridWorldEnv(GridConfig(
+        size=9, movement_mode=8, hidden_obstacle_count=0,
+        known_wall_segments=0, max_steps=40,
+    ))
+    exact = run_episode(env, OnlineAStarPolicy(8), seed=9, oracle_diagnostic=True)
+    assert exact["success"]
+    assert exact["spl"] == pytest.approx(1, abs=1e-10)
 
 
 def test_no_oracle_still_keeps_truth_private(monkeypatch):
