@@ -240,6 +240,73 @@ class MainWindow(QMainWindow):
         self._start_episode()
         self._update_view()
 
+    def _start_episode(self) -> None:
+        self.replay = None
+        self.recorder = EpisodeRecorder(self.env)
+        self.trail = [self.env.debug_snapshot()["robot"]]
+        self.truth_canvas.trail = self.trail
+        self.belief_canvas.trail = self.trail
+        self.truth_canvas.path = []
+        self.belief_canvas.path = []
+
+    def _mode_changed(self, index: int) -> None:
+        if self.replay is not None and index != 2:
+            self._reset_same_map()
+
+    def _change_speed(self, speed: int) -> None:
+        if self.playing:
+            self.timer.start(max(20, round(1000 / speed)))
+
+    def _save_episode(self, path: str) -> None:
+        if self.recorder is None or self.replay is not None:
+            raise ValueError("No live episode available to save")
+        self.recorder.save(path)
+
+    def _save_episode_dialog(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save recorded episode", "", "LayaNav episodes (*.json)"
+        )
+        if path:
+            try:
+                self._save_episode(path)
+            except (OSError, TypeError, ValueError) as exc:
+                QMessageBox.warning(self, "Episode save failed", str(exc))
+
+    def _load_episode(self, path: str) -> None:
+        session = ReplaySession.load(path)
+        self._stop()
+        self.replay = session
+        self.recorder = None
+        self.env = session.env
+        self.truth_canvas.env = self.env
+        self.belief_canvas.env = self.env
+        self.start = self.env.debug_snapshot()["robot"]
+        self.trail = [self.start]
+        self.truth_canvas.trail = self.trail
+        self.belief_canvas.trail = self.trail
+        self.truth_canvas.path = []
+        self.belief_canvas.path = []
+        self.radius.blockSignals(True)
+        self.radius.setValue(self.env.config.observation_radius)
+        self.radius.blockSignals(False)
+        self.sensor_mode.blockSignals(True)
+        sensor_index = self.sensor_mode.findData(self.env.config.sensor_mode)
+        self.sensor_mode.setCurrentIndex(sensor_index)
+        self.sensor_mode.blockSignals(False)
+        self.mode.setCurrentIndex(2)
+        self.total_reward = 0.0
+        self._update_view()
+
+    def _load_episode_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open recorded episode", "", "LayaNav episodes (*.json)"
+        )
+        if path:
+            try:
+                self._load_episode(path)
+            except (OSError, TypeError, ValueError) as exc:
+                QMessageBox.warning(self, "Episode replay failed", str(exc))
+
     def _stop(self) -> None:
         self.timer.stop()
         self.playing = False
@@ -295,6 +362,7 @@ class MainWindow(QMainWindow):
         self.start = layout["start"]
         self.policy = OnlineAStarPolicy()
         self.total_reward = 0.0
+        self._start_episode()
         self._update_view()
 
     def _load_map_dialog(self) -> None:
@@ -320,6 +388,7 @@ class MainWindow(QMainWindow):
         )
         self.total_reward = 0.0
         self.policy = OnlineAStarPolicy()
+        self._start_episode()
         self._update_view()
 
     def _new_map(self) -> None:
@@ -328,6 +397,7 @@ class MainWindow(QMainWindow):
         self.start = self.env.debug_snapshot()["robot"]
         self.total_reward = 0.0
         self.policy = OnlineAStarPolicy()
+        self._start_episode()
         self._update_view()
 
     def _edit_map(self, x: int, y: int) -> None:
@@ -367,6 +437,7 @@ class MainWindow(QMainWindow):
         self.start = start
         self.total_reward = 0.0
         self.policy = OnlineAStarPolicy()
+        self._start_episode()
         self._update_view()
 
     def _toggle_play(self) -> None:
