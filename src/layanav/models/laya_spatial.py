@@ -62,7 +62,7 @@ class SpatialTokenizer(nn.Module):
         if not grid.is_floating_point():
             raise TypeError("SpatialTokenizer requires floating-point map input")
         encoded = self.patch_encoder(grid)
-        batch, channels, _, _ = encoded.shape
+        batch = encoded.shape[0]
         patches = encoded.flatten(2).transpose(1, 2).contiguous()
         patches = self.projector(patches) + self.position_embedding
         summary = self.summary_token.expand(batch, -1, -1)
@@ -191,7 +191,7 @@ def load_laya_backbone(
     model = getattr(agent, "model", None)
     backbone = getattr(model, "encoder", None)
     if not isinstance(backbone, nn.Module):
-        raise RuntimeError("Loaded Laya checkpoint does not expose model.encoder")
+        raise TypeError("Loaded Laya checkpoint does not expose model.encoder")
     if not hasattr(getattr(backbone, "config", None), "hidden_size"):
         raise RuntimeError("Loaded Laya encoder has no config.hidden_size")
     source = {
