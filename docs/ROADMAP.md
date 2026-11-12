@@ -32,6 +32,8 @@
 - [x] Paired-seed bootstrap benchmark across controlled map families and held-out seeds
 - [x] Benchmark v2 SPL, Wilson success intervals, success-only distances, and privileged map difficulty descriptors
 - [x] U-Shape randomized start/goal depth and barrier separation
+- [x] Structured Map Generator v2 with connected nested hidden obstacles and route-step bounds
+- [x] Tortuosity-stratified success/SPL evaluation, mean path clearance and CI
 
 ## Milestone v0.3 — classical and neural baselines
 

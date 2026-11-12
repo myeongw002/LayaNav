@@ -223,6 +223,60 @@ barrier, with multiple distances and detours; older U-Shape seed-to-map
 pairs change. Stored replay files remain valid because they embed exact
 maps. The historical **Random** generator is unchanged.
 
+## Structured map density controls and difficulty-stratified evaluation
+
+Structured generator **v2** now fixes a bias observed in earlier Maze/Corridor
+results: start and goal are sampled on the original known topology *before*
+hidden obstacles are introduced. Hidden blockers are placed by pruning leaves
+of a seeded **4-cardinal-edge spanning tree**, preserving the entire
+start-reachable component except for the blocked cells. Cardinal connectivity
+is enforced even for 8-way motion because deleting support cells can invalidate
+diagonal edges under the no-corner-cutting rule.
+
+For a given seed and equal prior geometry/start/goal, increasing the requested
+hidden-obstacle count gives **nested blocker sets** (sparse ⊆ standard ⊆ dense).
+Consequently, the shortest true-map path cannot become shorter solely from
+adding blockers, and reachable-component size decreases by exactly the number
+of hidden cells placed. This applies to `maze`, `corridor`, `rooms` and
+`u_shape` when geometry is otherwise identical. The `cluttered` family also
+changes the number of known rectangular walls across densities, so the
+nested claim does not apply. The legacy `random` generator is unchanged by
+default.
+
+**These controls do not guarantee that Dense is universally harder.**
+For a one-cell-wide tree maze, pruning terminal branches cannot obstruct
+the preserved start–goal path; path length may remain unchanged. Generators
+must be assessed using measured route length, tortuosity, success rate and
+exploration demands rather than obstacle count alone.
+
+Optional route bounds use **shortest-path action count**, not weighted length.
+The requested bounds are validated, and impossible requests fail explicitly:
+
+```bash
+python -m layanav.evaluation.cli \
+  --methods astar apf --topologies maze corridor rooms \
+  --families sparse standard dense --movement-mode 8 \
+  --min-route-steps 20 --episodes 20 --eval-seed 400000 \
+  --oracle-diagnostic --sensor raycast \
+  --output-dir results/controlled_maps
+```
+
+Bounds are also supported by the BC data collection and PPO training CLIs.
+Custom `--max-route-steps` bounds apply to the resulting full map as well.
+If a strict maximum requires resampling maps for some density levels,
+cross-family nesting is **not** guaranteed; inspect map hashes/geometry.
+
+The benchmark now includes **mean shortest-path clearance** and reports
+success/SPL split by heuristic shortest-path tortuosity intervals:
+`direct` (T < 1.25), `moderate_detour` (1.25 ≤ T < 2.0),
+`large_detour` (T ≥ 2.0). This adds `tortuosity_groups.csv` and
+`summary.json[*].tortuosity_groups` when `--oracle-diagnostic` is enabled.
+These are **descriptive subgroups**, not calibrated easy/medium/hard labels.
+Per-group sample counts must be checked before drawing conclusions.
+
+The structured **seed-to-map layouts change** relative to generator v1.
+Existing replay JSON remains valid because it embeds the map truth.
+
 ## CNN + Behavior Cloning baseline (v0.3)
 
 The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).
