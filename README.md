@@ -2,7 +2,7 @@
 
 An experimental platform for **partially observable grid navigation** with online map updates, unknown static obstacles, interactive simulation, and future decision-model policies.
 
-## Current milestone: v0.2 (sensor occlusion + JSON maps)
+## Current milestone: v0.3 (CNN/BC + PPO + benchmark)
 
 - Gymnasium-compatible deterministic GridWorld; 32×32 by default
 - Prior static map, simulator-private unknown obstacles, and robot belief map
@@ -11,6 +11,8 @@ An experimental platform for **partially observable grid navigation** with onlin
 - Online A* that replans on the **belief map**, not privileged ground truth
 - PySide6 desktop map editor with sensor selection, JSON map import/export, planned A* path, visited trail and adjustable playback speed
 - Deterministic episode recording and replay with observation/reward consistency checks
+- PPO baseline with a custom spatial CNN extractor and checkpoint metadata
+- Paired-seed evaluation of A*, BC and PPO across controlled map families with 95% bootstrap confidence intervals
 - Tests for reproducibility, limited sensing, mapping, collision behavior, and replanning
 
 **The GUI's ground-truth panel is privileged debug visualization; policies must never receive it.**
@@ -90,9 +92,39 @@ python -m layanav.training.cli evaluate \
 
 A dataset stores 6-channel observations as uint8 values in `[0,10]` (scaled by 10 to preserve visit-count increments) and action labels. It deliberately omits simulator-private hidden obstacle truth. Saved checkpoints use PyTorch weights-only-compatible dictionaries. Reported accuracy is imitation-label accuracy; success rate must be measured separately through evaluation. Data collection excludes failed teacher episodes and reports their count.
 
+## PPO baseline and comparable evaluation (Issue #6)
+
+Install the PyTorch wheel matching your NVIDIA RTX 5070 and CUDA runtime **before** installing the PPO optional dependency (see [PyTorch install selector](https://pytorch.org/get-started/locally/)). For a CPU smoke test, the default PyTorch CPU build is sufficient. Stable-Baselines3 and the policy share the same 6-channel float32 observation; **image normalization is explicitly disabled**. The default sparse goal reward makes PPO a challenging baseline, so initial training success is not guaranteed.
+
+```bash
+# After verifying torch.cuda.is_available() on your GPU:
+python -m pip install -e ".[train,ppo]"
+
+# Collect a specified training budget in 4 environments.
+python -m layanav.training.ppo_cli \
+  --output checkpoints/ppo_standard.zip \
+  --timesteps 100000 --n-envs 4 --n-steps 128 \
+  --batch-size 128 --sensor raycast --device cuda
+
+# Same map seeds and observation rules for all evaluation policies:
+python -m layanav.evaluation.cli \
+  --methods astar bc ppo --families sparse standard dense \
+  --bc-checkpoint checkpoints/cnn_bc.pt \
+  --ppo-checkpoint checkpoints/ppo_standard.zip \
+  --episodes 100 --eval-seed 200000 --sensor raycast \
+  --grid-size 32 --radius 5 --max-steps 256 \
+  --oracle-diagnostic --device cuda --output-dir results/bench_v03
+```
+
+Outputs: `episodes.csv` (per-map results) and `summary.json` (paired seed range, exact environment configurations, checkpoint SHA-256 hashes, PPO training metadata, and percentile bootstrap 95% CIs over independent map seeds). The optional Oracle A* shortest-path diagnostic uses **privileged simulator truth only for reporting a lower bound**—not for training or choosing actions.
+
+**Comparability limits:** identical evaluation map seeds, actions, timeout and sensor settings do not make BC and PPO training budgets equivalent. BC receives expert demonstrations; PPO consumes environment interactions. If performance differs, training data and computation must also be controlled before concluding a model is superior. This v0.3 pipeline is implemented and smoke-tested; it is **not** a measured performance claim.
+
+See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the evaluation protocol and research limitations.
+
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya adapter, PPO training, and model benchmark are not implemented in v0.2**; these require separate, testable milestones.
+See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya spatial adapter, fine-tuning, and controlled transfer ablations** remain unimplemented. v0.3 PPO/benchmark support is an experimental foundation, not evidence that PPO or Laya performs well.
 
 ## License
 
