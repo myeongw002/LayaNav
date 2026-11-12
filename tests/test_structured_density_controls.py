@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -37,7 +38,7 @@ def test_structured_density_nested_and_full_component_preserved(topology, mode, 
         assert goal in after
         route = OnlineAStarPolicy._find_path(prior | hidden, start, goal, mode)
         assert route
-        distance = sum(math.dist(a, b) for a, b in zip(route[:-1], route[1:], strict=True))
+        distance = sum(math.dist(a, b) for a, b in pairwise(route))
         instances.append((prior, hidden, start, goal, distance))
 
     for a, b in zip(instances[:-1], instances[1:], strict=True):
