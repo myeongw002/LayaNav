@@ -107,7 +107,10 @@ from a cardinal spanning tree rooted at start (while preserving the goal).
 The remaining prior-reachable component stays connected under 4-way and 8-way
 (no diagonal corner cutting) motion. With fixed prior geometry/start/goal and
 nested obstacle placements, increasing hidden occupancy cannot reduce shortest
-true-map path length.
+true-map path length. The diagnostic `prior_layout_sha256` hashes the
+known-wall layer and start/goal (with an empty hidden layer), allowing
+cross-density verification of the common prior scenario, while
+`map_sha256` identifies the complete physical map.
 
 **Important limitations:**
 
