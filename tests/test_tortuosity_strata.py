@@ -34,7 +34,7 @@ def test_benchmark_subgroups_are_exhaustive_and_paired(tmp_path):
         sensor="raycast", max_steps=2, oracle_diagnostic=True,
         save_failures=False, bootstrap_replicates=100, output_dir=tmp_path,
     )
-    assert report["protocol"]["structured_map_generator_version"] == 2
+    assert report["protocol"]["structured_map_generator_version"] == 3
     assert report["protocol"]["tortuosity_bins_are_heuristic"]
 
     with (tmp_path / "tortuosity_groups.csv").open(encoding="utf-8") as f:
