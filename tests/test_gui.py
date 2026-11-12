@@ -13,7 +13,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 _APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
-def test_gui_start_edit_step_and_reset():
+def test_gui_start_edit_step_and_reset(tmp_path):
     from layanav.gui.app import MainWindow
 
     app = _APP
@@ -42,6 +42,20 @@ def test_gui_start_edit_step_and_reset():
     window.radius.setValue(3)
     assert window.env.config.observation_radius == 3
 
+    window.sensor_mode.setCurrentIndex(1)
+    assert window.env.config.sensor_mode == "raycast"
+
+    saved = tmp_path / "gui_map.json"
+    window._save_map(str(saved))
+    before = window.env.debug_snapshot()
+    window._new_map()
+    window._load_map(str(saved))
+    after = window.env.debug_snapshot()
+    np.testing.assert_array_equal(before["static_map"], after["static_map"])
+    np.testing.assert_array_equal(before["hidden_obstacles"], after["hidden_obstacles"])
+    assert before["goal"] == after["goal"]
+    assert window.start == before["robot"]
+    assert window.env.config.sensor_mode == "raycast"
     window._reset_same_map()
     assert window.env.debug_snapshot()["robot"] == window.start
     window.close()

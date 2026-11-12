@@ -8,7 +8,7 @@
 4. Compare learned policies against belief-map A* and equal-capacity random-init backbones.
 5. Don't assume text-pretrained Laya transfers to numerical spatial inputs.
 
-## Milestone v0.1 — environment foundation (this PR)
+## Milestone v0.1 — environment foundation (merged)
 
 - [x] Packaging, tests and CI
 - [x] GridWorldEnv (Gymnasium API)
@@ -22,9 +22,10 @@
 
 ## Milestone v0.2 — environment quality
 
-- Ray-cast occlusion sensor; document partial-observability assumptions
-- Map JSON load/save and map-generation presets
-- GUI path overlays, richer runtime diagnostics, episode recording/replay
+- [x] Ray-cast occlusion sensor; document partial-observability assumptions
+- [x] Versioned JSON map load/save with validation (including GUI)
+- [ ] Map-generation presets
+- [ ] GUI path overlays, richer runtime diagnostics, episode recording/replay
 - Robust evaluation suite across controlled map difficulty and seeds
 
 ## Milestone v0.3 — classical and neural baselines

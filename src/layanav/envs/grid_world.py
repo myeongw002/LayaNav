@@ -14,6 +14,9 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+from layanav.envs.map_io import validate_layout
+from layanav.envs.sensor import SensorMode, visibility_mask
+
 ACTION_NAMES = ("UP", "DOWN", "LEFT", "RIGHT", "STAY")
 DELTAS = ((0, -1), (0, 1), (-1, 0), (1, 0), (0, 0))
 
@@ -22,6 +25,7 @@ DELTAS = ((0, -1), (0, 1), (-1, 0), (1, 0), (0, 0))
 class GridConfig:
     size: int = 32
     observation_radius: int = 5
+    sensor_mode: SensorMode = "circle"
     hidden_obstacle_count: int = 24
     max_steps: int = 256
     known_wall_segments: int = 5
@@ -31,6 +35,8 @@ class GridConfig:
             raise ValueError("size must be >= 5")
         if self.observation_radius < 1:
             raise ValueError("observation_radius must be >= 1")
+        if self.sensor_mode not in ("circle", "raycast"):
+            raise ValueError("sensor_mode must be 'circle' or 'raycast'")
         if self.hidden_obstacle_count < 0 or self.known_wall_segments < 0:
             raise ValueError("obstacle counts must be nonnegative")
         if self.max_steps < 1:
@@ -128,24 +134,15 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
     def _provided_layout(
         self, options: dict[str, Any]
     ) -> tuple[np.ndarray, np.ndarray, tuple[int, int], tuple[int, int]]:
-        n = self.config.size
-        prior = np.asarray(options["static_map"], dtype=bool)
-        hidden = np.asarray(options.get("hidden_obstacles", np.zeros_like(prior)), dtype=bool)
-        if prior.shape != (n, n) or hidden.shape != (n, n):
-            raise ValueError(f"maps must have shape ({n}, {n})")
-        if np.any(prior & hidden):
-            raise ValueError("hidden obstacles cannot overlap known walls")
-        try:
-            start = tuple(int(v) for v in options["start"])
-            goal = tuple(int(v) for v in options["goal"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError("start and goal must be (x, y) coordinates") from exc
-        if len(start) != 2 or len(goal) != 2 or start == goal:
-            raise ValueError("start and goal must be distinct (x, y) coordinates")
-        for x, y in (start, goal):
-            if not (0 <= x < n and 0 <= y < n) or prior[y, x] or hidden[y, x]:
-                raise ValueError("start and goal must be free and within the map")
-        return prior.copy(), hidden.copy(), start, goal
+        clean = validate_layout(options)
+        if clean["static_map"].shape != (self.config.size, self.config.size):
+            raise ValueError("Layout dimensions must match GridConfig.size")
+        return (
+            clean["static_map"],
+            clean["hidden_obstacles"],
+            clean["start"],
+            clean["goal"],
+        )
 
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
@@ -166,9 +163,12 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         return self._observation(), self._info(False, False)
 
     def _observe(self) -> None:
-        x, y = self._robot
-        yy, xx = np.ogrid[: self.config.size, : self.config.size]
-        visible = (xx - x) ** 2 + (yy - y) ** 2 <= self.config.observation_radius**2
+        visible = visibility_mask(
+            self._prior | self._hidden,
+            self._robot,
+            self.config.observation_radius,
+            self.config.sensor_mode,
+        )
         self._unknown[visible] = False
         self._known_hidden[visible] |= self._hidden[visible]
 
