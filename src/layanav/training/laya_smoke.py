@@ -28,7 +28,8 @@ def smoke(
     revision: str | None,
     device: str,
     grid_size: int,
-    batch_size: int,
+    movement_mode: int = 4,
+    batch_size: int = 1,
     token_grid: int,
     feature_channels: int,
     seed: int,
@@ -52,11 +53,13 @@ def smoke(
             token_grid=token_grid,
             freeze_backbone=True,
         ),
+        movement_mode=movement_mode,
     ).to(device)
     model.train()
 
     env = GridWorldEnv(GridConfig(
         size=grid_size, observation_radius=5, sensor_mode="raycast",
+        movement_mode=movement_mode,
         hidden_obstacle_count=0, known_wall_segments=0
     ))
     try:
@@ -99,6 +102,7 @@ def smoke(
         "gpu_name": torch.cuda.get_device_name(device) if cuda else None,
         "batch_size": batch_size,
         "grid_size": grid_size,
+        "movement_mode": movement_mode,
         "spatial_tokens": token_grid**2 + 1,
         "actor_logits_shape": list(logits.shape),
         "critic_values_shape": list(critic_values.shape),
@@ -119,6 +123,7 @@ def main() -> None:
     parser.add_argument("--revision", default=None)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--grid-size", type=int, default=32)
+    parser.add_argument("--movement-mode", type=int, choices=[4, 8], default=4)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--token-grid", type=int, default=8)
     parser.add_argument("--feature-channels", type=int, default=64)
@@ -129,6 +134,7 @@ def main() -> None:
         revision=args.revision,
         device=args.device,
         grid_size=args.grid_size,
+        movement_mode=args.movement_mode,
         batch_size=args.batch_size,
         token_grid=args.token_grid,
         feature_channels=args.feature_channels,
