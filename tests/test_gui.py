@@ -92,6 +92,27 @@ def test_gui_start_edit_step_and_reset(tmp_path):
 
     window._reset_same_map()
     window.mode.setCurrentIndex(0)
+    # Move diagonally in 8-way manual mode; replay preserves the action space.
+    window.movement_mode.setCurrentIndex(window.movement_mode.findData(8))
+    assert window.env.action_space.n == 9
+    assert window.env.config.movement_mode == 8
+    window.mode.setCurrentIndex(1)
+    window._apply_action(8)
+    assert window.recorder is not None
+    assert window.recorder.steps[0]["action"] == 8
+    eight_path = tmp_path / "eight_way.json"
+    window._save_episode(str(eight_path))
+    recorded = window.env.debug_snapshot()
+    window._load_episode(str(eight_path))
+    assert window.movement_mode.currentData() == 8
+    assert window.env.action_space.n == 9
+    window._tick()
+    assert window.env.debug_snapshot()["robot"] == recorded["robot"]
+    assert window.replay.finished
+    window.movement_mode.setCurrentIndex(window.movement_mode.findData(4))
+    assert window.env.action_space.n == 5
+    assert window.replay is None
+
     window.close()
     window.deleteLater()
     app.processEvents()
