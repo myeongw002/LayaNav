@@ -473,7 +473,7 @@ class MainWindow(QMainWindow):
             return
         try:
             _, reward, terminated, truncated, info = self.replay.step()
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, TypeError, ValueError) as exc:
             self._stop()
             QMessageBox.warning(self, "Replay diverged", str(exc))
             return
