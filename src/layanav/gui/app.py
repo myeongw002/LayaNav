@@ -444,23 +444,50 @@ class MainWindow(QMainWindow):
         if self.playing:
             self._stop()
             return
-        if self.mode.currentIndex() != 0:
+        if self.mode.currentIndex() == 1:
+            return
+        if self.mode.currentIndex() == 2 and (
+            self.replay is None or self.replay.finished
+        ):
             return
         self.playing = True
         self.play_button.setText("Pause")
-        self.timer.start(90)
+        self.timer.start(max(20, round(1000 / self.speed.value())))
 
     def _tick(self) -> None:
-        if self.env._ended:
+        if self.mode.currentIndex() == 2:
+            self._replay_step()
+            return
+        if self.env._ended or self.mode.currentIndex() != 0:
             self._stop()
             return
-        action = self.policy.act(self.env._observation()) if self.mode.currentIndex() == 0 else 4
+        action = self.policy.act(self.env.observe())
+        self.belief_canvas.path = list(self.policy.last_path)
         self._apply_action(action)
 
-    def _apply_action(self, action: int) -> None:
-        if self.env._ended:
+    def _replay_step(self) -> None:
+        if self.replay is None or self.replay.finished:
+            self._stop()
             return
-        _, reward, terminated, truncated, info = self.env.step(action)
+        try:
+            _, reward, terminated, truncated, info = self.replay.step()
+        except (RuntimeError, ValueError) as exc:
+            self._stop()
+            QMessageBox.warning(self, "Replay diverged", str(exc))
+            return
+        self.total_reward += reward
+        self.trail.append(info["position"])
+        self._update_view(info)
+        if terminated or truncated or self.replay.finished:
+            self._stop()
+
+    def _apply_action(self, action: int) -> None:
+        if self.env._ended or self.replay is not None:
+            return
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if self.recorder is not None:
+            self.recorder.record_step(action, obs, reward, terminated, truncated, info)
+        self.trail.append(info["position"])
         self.total_reward += reward
         self._update_view(info)
         if terminated or truncated:
