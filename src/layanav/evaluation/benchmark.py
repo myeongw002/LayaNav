@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import math
+from itertools import pairwise
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -110,7 +111,7 @@ def run_episode(
         oracle_distance = (
             sum(
                 math.hypot(x1 - x0, y1 - y0)
-                for (x0, y0), (x1, y1) in zip(path[:-1], path[1:], strict=True)
+                for (x0, y0), (x1, y1) in pairwise(path)
             )
             if path else None
         )
