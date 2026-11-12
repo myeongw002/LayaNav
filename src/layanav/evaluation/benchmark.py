@@ -19,7 +19,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from layanav.envs import GridConfig, GridWorldEnv, action_count
+from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv, action_count
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder
 
@@ -30,7 +30,7 @@ FAMILY_LAYOUTS = {
     "dense": (64, 10),
 }
 REPORT_FIELDS = (
-    "family", "method", "seed", "success", "steps", "moves", "collisions",
+    "topology", "family", "method", "seed", "success", "steps", "moves", "collisions",
     "total_reward", "mean_inference_ms", "distance_traveled",
     "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
     "termination_reason", "failure_reason", "last_policy_status",
@@ -66,6 +66,7 @@ def make_family_config(
     sensor: str,
     max_steps: int,
     movement_mode: int = 4,
+    topology: str = "random",
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -81,6 +82,7 @@ def make_family_config(
         known_wall_segments=scaled_walls,
         max_steps=max_steps,
         movement_mode=movement_mode,
+        topology=topology,
     )
 
 
@@ -300,6 +302,7 @@ def benchmark(
     bootstrap_seed: int = 2026,
     bootstrap_replicates: int = 2000,
     save_failures: bool = True,
+    topologies: tuple[str, ...] = ("random",),
 ) -> dict[str, Any]:
     """Generate per-episode CSV plus JSON summary over paired held-out map seeds."""
     if episodes < 1 or eval_seed < 0:
@@ -312,6 +315,10 @@ def benchmark(
         raise ValueError("Unknown benchmark method")
     if set(families) - set(FAMILIES):
         raise ValueError("Unknown map family")
+    if not topologies or len(set(topologies)) != len(topologies):
+        raise ValueError("topologies must be nonempty and unique")
+    if set(topologies) - set(MAP_TOPOLOGIES):
+        raise ValueError("Unknown map topology")
     checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint, "laya": laya_checkpoint}
     policies = {
         method: _create_policy(
@@ -320,10 +327,12 @@ def benchmark(
         for method in methods
     }
     configurations = {
-        family: make_family_config(
+        (topology, family): make_family_config(
             family, size=size, radius=radius, sensor=sensor,
             max_steps=max_steps, movement_mode=movement_mode,
+            topology=topology,
         )
+        for topology in topologies
         for family in families
     }
     # Fail on input-shape mismatch before evaluating any episodes.
@@ -346,7 +355,7 @@ def benchmark(
 
     rows: list[dict[str, Any]] = []
     summaries: dict[str, Any] = {}
-    for family, config in configurations.items():
+    for (topology, family), config in configurations.items():
         env = GridWorldEnv(config)
         try:
             for method, policy in policies.items():
@@ -355,16 +364,20 @@ def benchmark(
                     seed = eval_seed + offset
                     trace_path = (
                         Path(output_dir) / "failures"
-                        / f"{family}_{method}_seed_{seed}.json"
+                        / f"{topology}_{family}_{method}_seed_{seed}.json"
                         if save_failures else None
                     )
                     row = run_episode(
                         env, policy, seed=seed,
                         oracle_diagnostic=oracle_diagnostic,
                         failure_trace_path=trace_path,
-                        trace_context={"family": family, "method": method},
+                        trace_context={
+                            "topology": topology, "family": family, "method": method,
+                        },
                     )
-                    row = {"family": family, "method": method, **row}
+                    row = {
+                        "topology": topology, "family": family, "method": method, **row,
+                    }
                     episode_rows.append(row)
                     rows.append(row)
                 summary: dict[str, Any] = {"episodes": episodes}
@@ -395,7 +408,8 @@ def benchmark(
                 summary["failure_traces"] = sum(
                     row["failure_trace"] is not None for row in episode_rows
                 )
-                summaries[f"{family}/{method}"] = summary
+                group = (f"{topology}/" if topology != "random" else "")
+                summaries[f"{group}{family}/{method}"] = summary
         finally:
             env.close()
 
@@ -435,6 +449,7 @@ def benchmark(
         "protocol": {
             "paired_map_seeds": True,
             "save_failure_traces": save_failures,
+            "topologies": list(topologies),
             "failure_reason_is_diagnostic": True,
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
@@ -452,7 +467,11 @@ def benchmark(
                 "BC is imitation-learning; PPO is environment-interaction training."
             ),
         },
-        "families": {name: asdict(config) for name, config in configurations.items()},
+        "families": {
+            (f"{topology}/" if topology != "random" else "") + family:
+                asdict(config)
+            for (topology, family), config in configurations.items()
+        },
         "methods": list(methods),
         "apf_config": asdict(apf_config or APFConfig()) if "apf" in methods else None,
         "checkpoints": checkpoint_details,

@@ -15,6 +15,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+from layanav.envs.map_generation import MAP_TOPOLOGIES, generate_structured_layout
 from layanav.envs.map_io import validate_layout
 from layanav.envs.sensor import SensorMode, visibility_mask
 
@@ -64,6 +65,7 @@ class GridConfig:
     hidden_obstacle_count: int = 24
     max_steps: int = 256
     known_wall_segments: int = 5
+    topology: str = "random"
 
     def __post_init__(self) -> None:
         if self.size < 5:
@@ -73,6 +75,10 @@ class GridConfig:
         if self.sensor_mode not in ("circle", "raycast"):
             raise ValueError("sensor_mode must be 'circle' or 'raycast'")
         action_count(self.movement_mode)
+        if not isinstance(self.topology, str) or self.topology not in MAP_TOPOLOGIES:
+            raise ValueError(f"Unknown map topology: {self.topology!r}")
+        if self.topology == "u_shape" and self.size < 9:
+            raise ValueError("u_shape requires grid size >= 9")
         if self.hidden_obstacle_count < 0 or self.known_wall_segments < 0:
             raise ValueError("obstacle counts must be nonnegative")
         if self.max_steps < 1:
@@ -129,6 +135,8 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         return False
 
     def _random_layout(self) -> tuple[np.ndarray, np.ndarray, tuple[int, int], tuple[int, int]]:
+        if self.config.topology != "random":
+            return generate_structured_layout(self.config, self.np_random)
         n = self.config.size
         for _ in range(400):
             prior = np.zeros((n, n), dtype=bool)

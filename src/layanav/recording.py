@@ -48,6 +48,7 @@ class EpisodeRecorder:
             "observation_radius": env.config.observation_radius,
             "max_steps": env.config.max_steps,
             "movement_mode": env.config.movement_mode,
+            "topology": env.config.topology,
         }
         self.action_count = env.action_space.n
         self.initial_digest = _observation_digest(env.observe())
@@ -143,6 +144,7 @@ class ReplaySession:
                 max_steps=max_steps,
                 sensor_mode=mode,
                 movement_mode=movement_mode,
+                topology=config.get("topology", "random"),
             )
             steps = trace["steps"]
             if not isinstance(steps, list) or len(steps) > max_steps:

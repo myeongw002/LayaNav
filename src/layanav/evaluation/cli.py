@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from layanav.envs import MAP_TOPOLOGIES
 from layanav.evaluation.benchmark import FAMILIES, benchmark
 from layanav.planners import APFConfig
 
@@ -13,6 +14,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Paired-seed navigation benchmark")
     parser.add_argument("--methods", nargs="+", default=["astar"])
     parser.add_argument("--families", nargs="+", default=list(FAMILIES))
+    parser.add_argument("--topologies", nargs="+", choices=MAP_TOPOLOGIES,
+                        default=["random"])
     parser.add_argument("--bc-checkpoint")
     parser.add_argument("--ppo-checkpoint")
     parser.add_argument("--laya-checkpoint")
@@ -39,6 +42,7 @@ def main() -> None:
         result = benchmark(
             methods=tuple(args.methods),
             families=tuple(args.families),
+            topologies=tuple(args.topologies),
             episodes=args.episodes,
             eval_seed=args.eval_seed,
             size=args.grid_size,
