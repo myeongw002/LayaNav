@@ -33,10 +33,11 @@
 ## Milestone v0.3 — classical and neural baselines
 
 - Online A* evaluation/benchmark runner
-- CNN+MLP imitation-learning policy
+- [x] CNN+MLP imitation-learning policy, compact datasets, CLI and checkpoints
 - CNN+PPO policy; optional recurrent baseline
-- Ensure teacher sees the same belief map, not simulator ground truth
-- Isolate trajectories by map seed and record wall-clock latency
+- [x] Ensure teacher sees the same belief map, not simulator ground truth
+- [x] Split trajectories by map seed and measure step-level inference latency
+- [ ] Add DAgger for recovery from policy-induced distribution shift and broader benchmark reports
 
 ## Milestone v0.4 — Laya spatial adaptation
 

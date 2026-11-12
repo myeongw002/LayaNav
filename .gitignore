@@ -10,6 +10,7 @@ dist/
 .coverage
 htmlcov/
 checkpoints/
+datasets/
 runs/
 results/
 *.pt
