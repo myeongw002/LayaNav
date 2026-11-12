@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from layanav.envs import GridConfig, GridWorldEnv
-from layanav.envs.grid_world import DELTAS, movement_actions, valid_transition
+from layanav.envs.grid_world import DELTAS, valid_transition
 from layanav.envs.map_generation import MAP_GENERATOR_VERSION, _distances
 from layanav.evaluation.benchmark import benchmark, run_episode
 from layanav.planners import OnlineAStarPolicy
