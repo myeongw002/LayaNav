@@ -6,21 +6,23 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from layanav.envs import ACTION_NAMES
+from layanav.envs import action_count
 
 
 class CNNPolicy(nn.Module):
-    """Convolutional five-action policy; no privileged map access.
+    """Convolutional policy for 5 or 9 actions; no privileged map access.
 
     Input: float32 (B, 6, H, W) from the public environment observation.
-    Output: unnormalized categorical action logits (B, 5).
+    Output: unnormalized categorical action logits (B, n_actions).
     """
 
-    def __init__(self, channels: int = 32) -> None:
+    def __init__(self, channels: int = 32, movement_mode: int = 4) -> None:
         super().__init__()
         if channels < 8 or channels % 8:
             raise ValueError("channels must be a multiple of 8 and >= 8")
         self.channels = channels
+        self.movement_mode = movement_mode
+        self.action_count = action_count(movement_mode)
         self.encoder = nn.Sequential(
             nn.Conv2d(6, channels, kernel_size=3, padding=1),
             nn.GroupNorm(8, channels),
@@ -37,7 +39,7 @@ class CNNPolicy(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(channels * 2 * 4 * 4, 128),
             nn.GELU(),
-            nn.Linear(128, len(ACTION_NAMES)),
+            nn.Linear(128, self.action_count),
         )
 
     def forward(self, observation: Tensor) -> Tensor:
