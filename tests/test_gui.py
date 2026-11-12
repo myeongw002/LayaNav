@@ -122,8 +122,12 @@ def test_gui_start_edit_step_and_reset(tmp_path):
     after_new_map = window.env.debug_snapshot()
     assert window.env.config.topology == "u_shape"
     assert window.env.action_space.n == 5
-    assert before_new_map["robot"] != after_new_map["robot"] or (
+    assert (
         not np.array_equal(
+            before_new_map["hidden_obstacles"], after_new_map["hidden_obstacles"]
+        )
+        or before_new_map["robot"] != after_new_map["robot"]
+        or not np.array_equal(
             before_new_map["static_map"], after_new_map["static_map"]
         )
     )
