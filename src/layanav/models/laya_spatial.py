@@ -18,6 +18,8 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from layanav.envs import action_count
+
 
 @dataclass(frozen=True)
 class SpatialAdapterConfig:
@@ -83,16 +85,19 @@ class SpatialLayaPolicy(nn.Module):
     """
 
     def __init__(
-        self, backbone: nn.Module, config: SpatialAdapterConfig | None = None
+        self, backbone: nn.Module, config: SpatialAdapterConfig | None = None,
+        movement_mode: int = 4,
     ) -> None:
         super().__init__()
         self.config = config or SpatialAdapterConfig()
+        self.movement_mode = movement_mode
+        self.action_count = action_count(movement_mode)
         hidden_size = getattr(getattr(backbone, "config", None), "hidden_size", None)
         if not isinstance(hidden_size, int) or hidden_size < 1:
             raise ValueError("Laya encoder must expose config.hidden_size")
         self.backbone = backbone
         self.tokenizer = SpatialTokenizer(hidden_size, self.config)
-        self.actor = nn.Sequential(nn.LayerNorm(hidden_size), nn.Linear(hidden_size, 5))
+        self.actor = nn.Sequential(nn.LayerNorm(hidden_size), nn.Linear(hidden_size, self.action_count))
         self.critic = nn.Sequential(nn.LayerNorm(hidden_size), nn.Linear(hidden_size, 1))
         if self.config.freeze_backbone:
             self.backbone.requires_grad_(False)

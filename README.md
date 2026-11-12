@@ -7,7 +7,8 @@ An experimental platform for **partially observable grid navigation** with onlin
 - Gymnasium-compatible deterministic GridWorld; 32×32 by default
 - Prior static map, simulator-private unknown obstacles, and robot belief map
 - Selectable ideal circular or occlusion-aware Bresenham raycast sensor (radius 5 by default)
-- Five discrete actions: up, down, left, right, stay
+- Configurable **4-way (5 actions)** or **8-way (9 actions)** navigation. Legacy action IDs 0–4 unchanged; diagonals are 5–8.
+- Diagonal corner-cutting is forbidden; diagonal geometric travel distance is `sqrt(2)`.
 - Online A* and discrete Artificial Potential Field (APF) using the **belief map**, not privileged ground truth
 - PySide6 desktop map editor with sensor selection, JSON map import/export, planned A* path, visited trail and adjustable playback speed
 - Deterministic episode recording and replay with observation/reward consistency checks
@@ -38,6 +39,57 @@ python -m layanav --episodes 5 --seed 42
 ```
 
 The simulator does **not** require PyTorch. For future RTX 5070 training, install a supported CUDA-enabled PyTorch wheel separately and verify `torch.cuda.is_available()` before installing Laya.
+
+## Motion modes (4-way and 8-way)
+
+The default remains **4-way**, maintaining compatibility with existing
+training datasets, models and recorded episodes. Specify `--movement-mode 8`
+for experiments or choose **8-way** in the GUI. Both modes always include
+a `STAY` action:
+
+| Action | Direction | Grid delta |
+|---|---|---|
+| 0 | UP | (0,-1) |
+| 1 | DOWN | (0,+1) |
+| 2 | LEFT | (-1,0) |
+| 3 | RIGHT | (+1,0) |
+| 4 | STAY | (0,0) |
+| 5 (8-way only) | UP_LEFT | (-1,-1) |
+| 6 (8-way only) | UP_RIGHT | (+1,-1) |
+| 7 (8-way only) | DOWN_LEFT | (-1,+1) |
+| 8 (8-way only) | DOWN_RIGHT | (+1,+1) |
+
+A diagonal attempt is rejected if **either** adjoining orthogonal cell
+is blocked, including still-undiscovered obstacles (physics enforces this;
+a planner can only reason about observed blockers). The 8-way A* uses
+**Octile Distance** and weighted edge costs: cardinal 1, diagonal `sqrt(2)`.
+The environment reports both step count and geometric distance traveled.
+The benchmark's oracle path efficiency uses geometric length, not step
+count. Reward semantics remain unchanged (step-based).
+
+```bash
+# CLI: same map seeds, different action spaces
+python -m layanav --policy astar --movement-mode 4 --seed 42
+python -m layanav --policy astar --movement-mode 8 --seed 42
+
+# Paired-seed A* and APF for 8-way; compare separately with 4-way.
+python -m layanav.evaluation.cli \
+  --methods astar apf --movement-mode 8 \
+  --families sparse standard dense --sensor raycast \
+  --episodes 100 --eval-seed 200000 \
+  --output-dir results/astar_apf_8way
+```
+
+GUI: select **4-way / 8-way**. Manual control uses arrow keys in either
+mode and **Q/E/Z/C** for diagonals when 8-way is active. Switching modes
+resets the episode without changing the map. Replays store the movement
+mode; old traces without a mode remain 4-way.
+
+CNN/BC, PPO and Laya training use the action count of the environment or
+training dataset. **Existing 5-output model checkpoints only work in 4-way
+evaluations**; to run 8-way learned policies, collect a new 8-way teacher
+dataset and retrain. The benchmark explicitly rejects mismatched action
+counts to prevent invalid comparisons.
 
 ## Policy observation (v0.2)
 

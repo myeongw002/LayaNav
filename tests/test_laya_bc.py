@@ -108,3 +108,45 @@ def test_train_adapter_checkpoint_reload_and_benchmark(monkeypatch, tmp_path):
             model=model, train_data=train_path, validation_data=train_path,
             output=checkpoint, source=source, epochs=1, batch_size=2,
         )
+
+
+def test_nine_action_laya_bc_checkpoint(tmp_path):
+    def write_dataset(path, start_seed):
+        encoded = np.zeros((4, 6, 9, 9), dtype=np.uint8)
+        encoded[:, 3, 1, 1] = 10
+        encoded[:, 4, 7, 7] = 10
+        save_dataset(path, {
+            "schema_version": np.asarray(1, dtype=np.int32),
+            "movement_mode": np.asarray(8, dtype=np.int32),
+            "observations": encoded,
+            "actions": np.asarray([5, 6, 7, 8], dtype=np.uint8),
+            "episode_seeds": np.arange(start_seed, start_seed + 4),
+        })
+
+    tr, va = tmp_path / "tr9.npz", tmp_path / "va9.npz"
+    write_dataset(tr, 10)
+    write_dataset(va, 100)
+    model = SpatialLayaPolicy(
+        DummyBackbone(),
+        SpatialAdapterConfig(feature_channels=8, token_grid=2),
+        movement_mode=8,
+    )
+    target = tmp_path / "laya9.pt"
+    train_laya_bc(
+        model=model, train_data=tr, validation_data=va, output=target,
+        source={"model_id": "test/mock"}, epochs=1, batch_size=2,
+    )
+    payload = torch.load(target, weights_only=True, map_location="cpu")
+    assert payload["movement_mode"] == 8
+    assert payload["adapter_state"]["actor.1.weight"].shape[0] == 9
+
+    wrong = SpatialLayaPolicy(
+        DummyBackbone(),
+        SpatialAdapterConfig(feature_channels=8, token_grid=2),
+        movement_mode=4,
+    )
+    with pytest.raises(ValueError, match="movement_mode"):
+        train_laya_bc(
+            model=wrong, train_data=tr, validation_data=va, output=target,
+            source={"model_id": "test/mock"}, epochs=1, batch_size=2,
+        )

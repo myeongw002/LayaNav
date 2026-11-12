@@ -138,3 +138,14 @@ def test_laya_loader_is_lazy_and_tracks_revision(monkeypatch):
     assert source["hidden_size"] == 32
     assert arguments[0][1]["backend"] == "eager"
     assert arguments[0][1]["revision"] == "0123456789abcdef"
+
+
+def test_nine_action_laya_head_with_fake_backbone():
+    model = SpatialLayaPolicy(
+        TinyBackbone(), SpatialAdapterConfig(feature_channels=8, token_grid=2),
+        movement_mode=8,
+    )
+    assert model.action_count == 9
+    logits, values = model(torch.rand((2, 6, 9, 9)))
+    assert logits.shape == (2, 9)
+    assert values.shape == (2,)

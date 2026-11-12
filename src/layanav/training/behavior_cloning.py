@@ -16,7 +16,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from layanav.models.cnn_policy import CNNPolicy
-from layanav.training.dataset import load_dataset
+from layanav.training.dataset import load_dataset, load_dataset_movement_mode
 
 
 def _evaluate_loss(
@@ -57,6 +57,10 @@ def train_behavior_cloning(
         raise ValueError("Invalid training hyperparameters")
     if seed < 0:
         raise ValueError("seed must be nonnegative")
+    train_mode = load_dataset_movement_mode(train_data)
+    val_mode = load_dataset_movement_mode(validation_data)
+    if train_mode != val_mode:
+        raise ValueError("Train and validation movement_mode differ")
     train_obs, train_actions, train_seeds = load_dataset(train_data)
     val_obs, val_actions, val_seeds = load_dataset(validation_data)
     if train_obs.shape[1:] != val_obs.shape[1:]:
@@ -67,7 +71,7 @@ def train_behavior_cloning(
     torch.manual_seed(seed)
     np.random.seed(seed)
     device_obj = torch.device(device)
-    model = CNNPolicy(channels=channels).to(device_obj)
+    model = CNNPolicy(channels=channels, movement_mode=train_mode).to(device_obj)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
     train_set = TensorDataset(
@@ -116,6 +120,7 @@ def train_behavior_cloning(
                 {
                     "model": model.state_dict(),
                     "channels": channels,
+                    "movement_mode": train_mode,
                     "seed": seed,
                     "epoch": epoch,
                     "observation_shape": list(train_obs.shape[1:]),
@@ -136,7 +141,10 @@ def load_policy(checkpoint: str | Path, device: str = "cpu") -> CNNPolicy:
     )
     if not isinstance(contents, dict) or "model" not in contents:
         raise ValueError("Malformed CNN checkpoint")
-    model = CNNPolicy(channels=int(contents["channels"]))
+    model = CNNPolicy(
+        channels=int(contents["channels"]),
+        movement_mode=int(contents.get("movement_mode", 4)),
+    )
     model.load_state_dict(contents["model"], strict=True)
     model.to(torch.device(device))
     model.eval()

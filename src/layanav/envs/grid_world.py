@@ -6,6 +6,7 @@ A policy must consume the observation, never debug_snapshot().
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -17,8 +18,41 @@ from gymnasium import spaces
 from layanav.envs.map_io import validate_layout
 from layanav.envs.sensor import SensorMode, visibility_mask
 
-ACTION_NAMES = ("UP", "DOWN", "LEFT", "RIGHT", "STAY")
-DELTAS = ((0, -1), (0, 1), (-1, 0), (1, 0), (0, 0))
+# Preserve all legacy action IDs (especially STAY=4) for old checkpoints.
+ACTION_NAMES = (
+    "UP", "DOWN", "LEFT", "RIGHT", "STAY",
+    "UP_LEFT", "UP_RIGHT", "DOWN_LEFT", "DOWN_RIGHT",
+)
+DELTAS = (
+    (0, -1), (0, 1), (-1, 0), (1, 0), (0, 0),
+    (-1, -1), (1, -1), (-1, 1), (1, 1),
+)
+STAY_ACTION = 4
+VALID_MOVEMENT_MODES = (4, 8)
+
+
+def action_count(movement_mode: int) -> int:
+    if type(movement_mode) is not int or movement_mode not in VALID_MOVEMENT_MODES:
+        raise ValueError("movement_mode must be 4 or 8")
+    return 5 if movement_mode == 4 else 9
+
+
+def movement_actions(movement_mode: int) -> tuple[int, ...]:
+    action_count(movement_mode)
+    return (0, 1, 2, 3) if movement_mode == 4 else (0, 1, 2, 3, 5, 6, 7, 8)
+
+
+def valid_transition(blocked: np.ndarray, x: int, y: int, dx: int, dy: int) -> bool:
+    """Shared motion rule: never cut diagonally past either orthogonal blocker."""
+    h, w = blocked.shape
+    nx, ny = x + dx, y + dy
+    if not (0 <= nx < w and 0 <= ny < h) or blocked[ny, nx]:
+        return False
+    return not (dx and dy and (blocked[y, nx] or blocked[ny, x]))
+
+
+def step_distance(dx: int, dy: int) -> float:
+    return math.hypot(dx, dy)
 
 
 @dataclass
@@ -26,6 +60,7 @@ class GridConfig:
     size: int = 32
     observation_radius: int = 5
     sensor_mode: SensorMode = "circle"
+    movement_mode: int = 4
     hidden_obstacle_count: int = 24
     max_steps: int = 256
     known_wall_segments: int = 5
@@ -37,6 +72,7 @@ class GridConfig:
             raise ValueError("observation_radius must be >= 1")
         if self.sensor_mode not in ("circle", "raycast"):
             raise ValueError("sensor_mode must be 'circle' or 'raycast'")
+        action_count(self.movement_mode)
         if self.hidden_obstacle_count < 0 or self.known_wall_segments < 0:
             raise ValueError("obstacle counts must be nonnegative")
         if self.max_steps < 1:
@@ -58,7 +94,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         super().__init__()
         self.config = config if config is not None else GridConfig()
         n = self.config.size
-        self.action_space = spaces.Discrete(len(ACTION_NAMES))
+        self.action_space = spaces.Discrete(action_count(self.config.movement_mode))
         self.observation_space = spaces.Box(0.0, 1.0, shape=(6, n, n), dtype=np.float32)
         self._prior = np.zeros((n, n), dtype=bool)
         self._hidden = np.zeros((n, n), dtype=bool)
@@ -68,25 +104,26 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         self._robot = (0, 0)
         self._goal = (0, 0)
         self._steps = 0
+        self._distance_traveled = 0.0
         self._ended = True
 
     @staticmethod
-    def _reachable(blocked: np.ndarray, start: tuple[int, int], goal: tuple[int, int]) -> bool:
-        n = blocked.shape[0]
+    def _reachable(
+        blocked: np.ndarray,
+        start: tuple[int, int],
+        goal: tuple[int, int],
+        movement_mode: int = 4,
+    ) -> bool:
         queue = deque([start])
         seen = {start}
         while queue:
             x, y = queue.popleft()
             if (x, y) == goal:
                 return True
-            for dx, dy in DELTAS[:4]:
+            for action in movement_actions(movement_mode):
+                dx, dy = DELTAS[action]
                 xx, yy = x + dx, y + dy
-                if (
-                    0 <= xx < n
-                    and 0 <= yy < n
-                    and not blocked[yy, xx]
-                    and (xx, yy) not in seen
-                ):
+                if valid_transition(blocked, x, y, dx, dy) and (xx, yy) not in seen:
                     seen.add((xx, yy))
                     queue.append((xx, yy))
         return False
@@ -127,7 +164,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
                 selected = self.np_random.choice(len(available), size=k, replace=False)
                 locations = available[selected]
                 hidden[locations[:, 0], locations[:, 1]] = True
-            if self._reachable(prior | hidden, start, goal):
+            if self._reachable(prior | hidden, start, goal, self.config.movement_mode):
                 return prior, hidden, start, goal
         raise RuntimeError("Unable to generate a solvable map; reduce obstacle density")
 
@@ -156,6 +193,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         self._unknown = ~self._prior.copy()
         self._visits = np.zeros_like(self._visits)
         self._steps = 0
+        self._distance_traveled = 0.0
         self._ended = False
         x, y = self._robot
         self._visits[y, x] = 1
@@ -196,6 +234,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         return {
             "position": self._robot,
             "steps": self._steps,
+            "distance_traveled": self._distance_traveled,
             "collision": collision,
             "success": success,
         }
@@ -208,14 +247,11 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         dx, dy = DELTAS[int(action)]
         x, y = self._robot
         xx, yy = x + dx, y + dy
-        collision = not (
-            0 <= xx < self.config.size
-            and 0 <= yy < self.config.size
-            and not self._prior[yy, xx]
-            and not self._hidden[yy, xx]
-        )
+        blocked = self._prior | self._hidden
+        collision = not valid_transition(blocked, x, y, dx, dy)
         if not collision:
             self._robot = (xx, yy)
+            self._distance_traveled += step_distance(dx, dy)
         self._steps += 1
         x, y = self._robot
         self._visits[y, x] += 1
@@ -237,6 +273,7 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
             "robot": self._robot,
             "goal": self._goal,
             "step": self._steps,
+            "distance_traveled": self._distance_traveled,
         }
 
     def render(self) -> np.ndarray:

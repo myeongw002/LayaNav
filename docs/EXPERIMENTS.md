@@ -10,8 +10,11 @@ This benchmark does not establish that a language-pretrained Decision Model tran
 
 - Agent input: six-channel policy-safe float32 map, including prior walls, discovered hidden obstacles, unknown cells, current position, goal and capped visit counts.
 - True hidden obstacles remain simulator-private. The policy and A* baseline receive only the policy observation.
-- Actions: five discrete choices (four cardinal moves and stay). Attempted collisions do not change position.
-- Fixed timeout, reward and collision logic per method within a benchmark.
+- Actions: configurable 4-way = four cardinal moves + stay (5 choices); 8-way = the same five action IDs plus four diagonal actions (9 choices). Attempted collisions do not change position.
+- Diagonal motion is forbidden if either adjacent orthogonal cell contains an obstacle, including hidden simulator-only blockers.
+- Cardinal travel costs 1 grid unit, diagonal travel costs `sqrt(2)`. A* uses an Octile heuristic in 8-way mode. Path efficiency is computed with geometric distance, **not** move count.
+- Models must be trained for the same action-space size as the evaluation environment; 5-action weights are not silently expanded into 9-action weights.
+- Fixed timeout, reward and collision logic per method within a benchmark. Preserve movement mode within an evaluation group; 4-way and 8-way have different feasible path spaces and cannot be compared as identical tasks.
 - Episode-level random map generation is seeded by `eval_seed + episode_index`; every method uses the **same seed for each map family**.
 - Map families differ in hidden obstacle count and known wall segments; all use the same grid size and action space. Family densities scale with grid size.
 - `raycast` senses only cells with discrete Bresenham line-of-sight; `circle` is an ideal (no-occlusion) sensor.

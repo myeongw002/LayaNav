@@ -19,7 +19,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from layanav.envs.grid_world import DELTAS
+from layanav.envs.grid_world import (
+    DELTAS,
+    STAY_ACTION,
+    action_count,
+    movement_actions,
+    valid_transition,
+)
 
 
 @dataclass(frozen=True)
@@ -66,7 +72,11 @@ class ArtificialPotentialFieldPolicy:
     and learned policies. `last_status` is diagnostic state for the GUI.
     """
 
-    def __init__(self, config: APFConfig | None = None) -> None:
+    def __init__(
+        self, config: APFConfig | None = None, movement_mode: int = 4
+    ) -> None:
+        action_count(movement_mode)
+        self.movement_mode = movement_mode
         self.config = config if config is not None else APFConfig()
         self.last_status = "ready"
         self.last_potentials: dict[int, float] = {}
@@ -114,7 +124,6 @@ class ArtificialPotentialFieldPolicy:
             or observation.shape[0] != 6
         ):
             raise ValueError("Expected six-channel (6,H,W) numpy observation")
-        _, height, width = observation.shape
         if not np.isfinite(observation).all():
             raise ValueError("Observation contains NaN or infinity")
         start = self._position(observation[3], "robot")
@@ -127,16 +136,17 @@ class ArtificialPotentialFieldPolicy:
         self.last_potentials = {}
         if start == goal:
             self.last_status = "goal"
-            return 4
+            return STAY_ACTION
 
         obstacles = np.argwhere(blocked)
         current = self._potential(x, y, goal, obstacles, unknown)
         best = current
-        best_action = 4
+        best_action = STAY_ACTION
         valid_neighbors = 0
-        for action, (dx, dy) in enumerate(DELTAS[:4]):
+        for action in movement_actions(self.movement_mode):
+            dx, dy = DELTAS[action]
             nx, ny = x + dx, y + dy
-            if not (0 <= nx < width and 0 <= ny < height) or blocked[ny, nx]:
+            if not valid_transition(blocked, x, y, dx, dy):
                 continue
             valid_neighbors += 1
             potential = self._potential(nx, ny, goal, obstacles, unknown)
@@ -147,7 +157,7 @@ class ArtificialPotentialFieldPolicy:
                 best = potential
                 best_action = action
         self.last_status = (
-            "moving" if best_action != 4
+            "moving" if best_action != STAY_ACTION
             else "blocked" if valid_neighbors == 0
             else "local_minimum"
         )

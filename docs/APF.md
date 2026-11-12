@@ -26,7 +26,10 @@ heuristic—not a calibrated occupancy probability or risk estimate.
 All distances are in grid-cell units. Obstacles are excluded as motion
 candidates before scoring.
 
-At each step, evaluate the potential of four 4-connected neighbors and
+At each step, evaluate four cardinal neighbors in 4-way mode or eight
+cardinal/diagonal neighbors in 8-way mode. A diagonal move is excluded if
+either adjoining orthogonal cell is blocked in the belief map. Then
+
 choose the lowest-cost free cell **only if the potential strictly decreases**.
 If there is no strictly lower neighboring free cell, output action `STAY`
 and label the diagnostic state `local_minimum` or `blocked`. This avoids

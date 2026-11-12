@@ -15,6 +15,7 @@ from layanav.models.laya_spatial import (
     SpatialLayaPolicy,
     load_laya_backbone,
 )
+from layanav.training.dataset import load_dataset_movement_mode
 from layanav.training.laya_bc import train_laya_bc
 
 
@@ -43,6 +44,7 @@ def main() -> None:
     )
     # Seed the trainable spatial/decision heads *before* their initialization.
     torch.manual_seed(args.seed)
+    movement_mode = load_dataset_movement_mode(args.train)
     model = SpatialLayaPolicy(
         backbone,
         SpatialAdapterConfig(
@@ -50,6 +52,7 @@ def main() -> None:
             token_grid=args.token_grid,
             freeze_backbone=True,
         ),
+        movement_mode=movement_mode,
     ).to(args.device)
     train_laya_bc(
         model=model,

@@ -10,14 +10,16 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
 
-from layanav.envs import GridConfig, GridWorldEnv
+from layanav.envs import GridConfig, GridWorldEnv, action_count
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 
 FAMILIES = ("sparse", "standard", "dense")
@@ -28,8 +30,8 @@ FAMILY_LAYOUTS = {
 }
 REPORT_FIELDS = (
     "family", "method", "seed", "success", "steps", "moves", "collisions",
-    "total_reward", "mean_inference_ms", "oracle_shortest_moves",
-    "oracle_efficiency",
+    "total_reward", "mean_inference_ms", "distance_traveled",
+    "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
 )
 
 
@@ -59,6 +61,7 @@ def make_family_config(
     radius: int,
     sensor: str,
     max_steps: int,
+    movement_mode: int = 4,
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -73,6 +76,7 @@ def make_family_config(
         hidden_obstacle_count=scaled_hidden,
         known_wall_segments=scaled_walls,
         max_steps=max_steps,
+        movement_mode=movement_mode,
     )
 
 
@@ -95,12 +99,22 @@ def run_episode(
     obs, info = env.reset(seed=seed)
     previous = info["position"]
     oracle_moves: int | None = None
+    oracle_distance: float | None = None
     if oracle_diagnostic:
         # Intentional privilege boundary: reporting-only lower bound.
         truth = env.debug_snapshot()
         blocked = truth["static_map"] | truth["hidden_obstacles"]
-        path = OnlineAStarPolicy._find_path(blocked, truth["robot"], truth["goal"])
+        path = OnlineAStarPolicy._find_path(
+            blocked, truth["robot"], truth["goal"], env.config.movement_mode
+        )
         oracle_moves = len(path) - 1 if path else None
+        oracle_distance = (
+            sum(
+                math.hypot(x1 - x0, y1 - y0)
+                for (x0, y0), (x1, y1) in pairwise(path)
+            )
+            if path else None
+        )
 
     total_reward = 0.0
     collisions = 0
@@ -112,8 +126,10 @@ def run_episode(
         action = policy.act(obs)
         _synchronize(policy)
         latency_seconds += time.perf_counter() - start
-        if type(action) is not int or not 0 <= action < 5:
-            raise ValueError(f"Policy must return an integer action in [0,4], got {action!r}")
+        if type(action) is not int or not env.action_space.contains(action):
+            raise ValueError(
+                f"Policy action {action!r} invalid for {env.config.movement_mode}-way motion"
+            )
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += float(reward)
         collisions += int(info["collision"])
@@ -124,8 +140,8 @@ def run_episode(
             break
     success = bool(info["success"])
     efficiency = (
-        oracle_moves / moves
-        if success and oracle_moves is not None and moves > 0
+        oracle_distance / info["distance_traveled"]
+        if success and oracle_distance is not None and info["distance_traveled"] > 0
         else None
     )
     return {
@@ -137,6 +153,8 @@ def run_episode(
         "total_reward": total_reward,
         "mean_inference_ms": 1000 * latency_seconds / info["steps"],
         "oracle_shortest_moves": oracle_moves,
+        "oracle_shortest_distance": oracle_distance,
+        "distance_traveled": info["distance_traveled"],
         "oracle_efficiency": efficiency,
     }
 
@@ -178,11 +196,12 @@ def _create_policy(
     checkpoint: str | Path | None,
     device: str,
     apf_config: APFConfig | None = None,
+    movement_mode: int = 4,
 ) -> NavigationPolicy:
     if method == "astar":
-        return OnlineAStarPolicy()
+        return OnlineAStarPolicy(movement_mode)
     if method == "apf":
-        return ArtificialPotentialFieldPolicy(apf_config)
+        return ArtificialPotentialFieldPolicy(apf_config, movement_mode)
     if checkpoint is None:
         raise ValueError(f"{method} requires a checkpoint")
     if method == "bc":
@@ -212,6 +231,7 @@ def benchmark(
     sensor: str,
     max_steps: int,
     output_dir: str | Path,
+    movement_mode: int = 4,
     bc_checkpoint: str | Path | None = None,
     ppo_checkpoint: str | Path | None = None,
     laya_checkpoint: str | Path | None = None,
@@ -234,17 +254,31 @@ def benchmark(
         raise ValueError("Unknown map family")
     checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint, "laya": laya_checkpoint}
     policies = {
-        method: _create_policy(method, checkpoints.get(method), device, apf_config)
+        method: _create_policy(
+            method, checkpoints.get(method), device, apf_config, movement_mode
+        )
         for method in methods
     }
     configurations = {
         family: make_family_config(
-            family, size=size, radius=radius, sensor=sensor, max_steps=max_steps
+            family, size=size, radius=radius, sensor=sensor,
+            max_steps=max_steps, movement_mode=movement_mode,
         )
         for family in families
     }
     # Fail on input-shape mismatch before evaluating any episodes.
     for method, policy in policies.items():
+        expected_actions = action_count(movement_mode)
+        if method in ("bc", "laya") and policy.model.action_count != expected_actions:
+            raise ValueError(
+                f"{method} checkpoint expects {policy.model.action_count} actions; "
+                f"benchmark uses {expected_actions}"
+            )
+        if method == "ppo" and policy.model.action_space.n != expected_actions:
+            raise ValueError(
+                f"PPO checkpoint expects {policy.model.action_space.n} actions; "
+                f"benchmark uses {expected_actions}"
+            )
         if method == "ppo":
             shape = tuple(policy.model.observation_space.shape)
             if shape != (6, size, size):
@@ -268,7 +302,7 @@ def benchmark(
                 summary: dict[str, Any] = {"episodes": episodes}
                 for metric in (
                     "success", "steps", "moves", "collisions", "total_reward",
-                    "mean_inference_ms", "oracle_efficiency",
+                    "mean_inference_ms", "distance_traveled", "oracle_efficiency",
                 ):
                     series = np.asarray([
                         float(row[metric]) if row[metric] is not None else np.nan
@@ -323,6 +357,9 @@ def benchmark(
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
             "sensor": sensor,
+            "movement_mode": movement_mode,
+            "diagonal_cost": "sqrt(2) for diagonal, 1 for cardinal",
+            "corner_cutting": "forbidden",
             "oracle_is_privileged_diagnostic_only": oracle_diagnostic,
             "confidence_interval": "95% percentile bootstrap across map seeds",
             "bootstrap_replicates": bootstrap_replicates,

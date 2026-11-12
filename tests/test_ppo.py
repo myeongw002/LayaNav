@@ -79,3 +79,30 @@ def test_short_ppo_train_save_reload_and_benchmark(tmp_path):
             eval_seed=200000, size=12, radius=2, sensor="raycast", max_steps=20,
             output_dir=tmp_path / "wrong-shape", ppo_checkpoint=checkpoint,
         )
+
+
+def test_eight_way_ppo_action_space(tmp_path):
+    config = GridConfig(
+        size=9, movement_mode=8, observation_radius=2, sensor_mode="circle",
+        hidden_obstacle_count=0, known_wall_segments=0, max_steps=20,
+    )
+    checkpoint = tmp_path / "ppo_8.zip"
+    meta = train_ppo(
+        output=checkpoint, env_config=config,
+        settings=PPOSettings(
+            timesteps=16, n_envs=1, n_steps=8, batch_size=8,
+            n_epochs=1, channels=8, device="cpu", seed=32,
+        ),
+    )
+    assert meta["action_count"] == 9
+    policy = load_ppo_policy(checkpoint)
+    assert policy.model.action_space.n == 9
+    observation, _ = GridWorldEnv(config).reset(seed=40)
+    assert policy.act(observation) in range(9)
+    with pytest.raises(ValueError, match="actions"):
+        benchmark(
+            methods=("ppo",), families=("sparse",),
+            episodes=1, eval_seed=1234, size=9, radius=2, sensor="circle",
+            max_steps=20, movement_mode=4,
+            output_dir=tmp_path / "mismatch", ppo_checkpoint=checkpoint,
+        )

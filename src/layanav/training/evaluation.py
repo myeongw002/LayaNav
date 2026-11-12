@@ -24,6 +24,8 @@ def evaluate_policy(
         raise ValueError("episodes must be positive and seed_start nonnegative")
     policy = load_policy(checkpoint, device=device)
     env = GridWorldEnv(config)
+    if policy.action_count != env.action_space.n:
+        raise ValueError("Checkpoint action count does not match environment movement_mode")
     success = 0
     collision_attempts = 0
     total_steps = 0

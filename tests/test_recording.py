@@ -83,3 +83,39 @@ def test_replay_invalid_trace_version():
     trace["schema_version"] = 99
     with pytest.raises(ValueError, match="Unsupported"):
         ReplaySession(trace)
+
+
+def test_eight_way_replay_and_legacy_mode(tmp_path):
+    import json
+
+    n = 9
+    prior = np.zeros((n, n), dtype=bool)
+    hidden = np.zeros_like(prior)
+    options = {
+        "static_map": prior, "hidden_obstacles": hidden,
+        "start": (1, 1), "goal": (7, 7),
+    }
+    env = GridWorldEnv(
+        GridConfig(size=n, movement_mode=8, observation_radius=2, max_steps=20)
+    )
+    env.reset(options=options)
+    recorder = EpisodeRecorder(env)
+    obs, reward, done, truncated, info = env.step(8)
+    recorder.record_step(8, obs, reward, done, truncated, info)
+    dest = tmp_path / "eight.json"
+    recorder.save(dest)
+    loaded = ReplaySession.load(dest)
+    assert loaded.env.action_space.n == 9
+    loaded.step()
+    assert loaded.env.debug_snapshot()["robot"] == (2, 2)
+
+    tampered = json.loads(dest.read_text(encoding="utf-8"))
+    tampered["config"]["movement_mode"] = 4
+    with pytest.raises(ValueError, match="Invalid trace action"):
+        ReplaySession(tampered).step()
+
+    old = recorder.to_dict()
+    old["config"].pop("movement_mode")
+    old["steps"].clear()
+    old["initial_observation_sha256"] = recorder.initial_digest
+    assert ReplaySession(old).env.config.movement_mode == 4

@@ -47,7 +47,9 @@ class EpisodeRecorder:
             "sensor_mode": env.config.sensor_mode,
             "observation_radius": env.config.observation_radius,
             "max_steps": env.config.max_steps,
+            "movement_mode": env.config.movement_mode,
         }
+        self.action_count = env.action_space.n
         self.initial_digest = _observation_digest(env.observe())
         self.steps: list[dict[str, Any]] = []
 
@@ -62,8 +64,8 @@ class EpisodeRecorder:
     ) -> None:
         if self.steps and (self.steps[-1]["terminated"] or self.steps[-1]["truncated"]):
             raise RuntimeError("Cannot record after episode has ended")
-        if not isinstance(action, int) or not 0 <= action < 5:
-            raise ValueError("action must be an integer in [0, 4]")
+        if type(action) is not int or not 0 <= action < self.action_count:
+            raise ValueError("action is outside the configured action space")
         if not np.isfinite(reward) or info.get("steps") != len(self.steps) + 1:
             raise ValueError("Invalid reward or step ordering")
         self.steps.append(
@@ -73,6 +75,7 @@ class EpisodeRecorder:
                 "terminated": bool(terminated),
                 "truncated": bool(truncated),
                 "position": list(info["position"]),
+                "distance_traveled": info["distance_traveled"],
                 "observation_sha256": _observation_digest(observation),
             }
         )
@@ -127,6 +130,7 @@ class ReplaySession:
             radius = config["observation_radius"]
             max_steps = config["max_steps"]
             mode = config["sensor_mode"]
+            movement_mode = config.get("movement_mode", 4)
             if type(radius) is not int or type(max_steps) is not int:
                 raise ValueError("Invalid trace radius/max_steps")
             env_config = GridConfig(
@@ -134,6 +138,7 @@ class ReplaySession:
                 observation_radius=radius,
                 max_steps=max_steps,
                 sensor_mode=mode,
+                movement_mode=movement_mode,
             )
             steps = trace["steps"]
             if not isinstance(steps, list) or len(steps) > max_steps:
@@ -167,7 +172,7 @@ class ReplaySession:
         if not isinstance(item, dict):
             raise TypeError("Malformed trace step")
         action = item.get("action")
-        if type(action) is not int or not 0 <= action < 5:
+        if type(action) is not int or not 0 <= action < self.env.action_space.n:
             raise ValueError("Invalid trace action")
         observation, reward, terminated, truncated, info = self.env.step(action)
         expected_position = item.get("position")
@@ -179,6 +184,15 @@ class ReplaySession:
             or terminated != item.get("terminated")
             or truncated != item.get("truncated")
             or list(info["position"]) != expected_position
+            or (
+                "distance_traveled" in item
+                and (
+                    not isinstance(item["distance_traveled"], (int, float))
+                    or not math.isclose(
+                        info["distance_traveled"], item["distance_traveled"], abs_tol=1e-8
+                    )
+                )
+            )
             or _observation_digest(observation) != item.get("observation_sha256")
         ):
             raise ValueError(f"Replay diverged at step {self.index}")
