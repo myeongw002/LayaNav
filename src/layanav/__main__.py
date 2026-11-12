@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from layanav.envs import GridWorldEnv
-from layanav.planners import OnlineAStarPolicy
+from layanav.planners import ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 
 
 def main() -> None:
@@ -13,6 +13,7 @@ def main() -> None:
     parser.add_argument("--gui", action="store_true", help="launch optional PySide6 viewer")
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--policy", choices=["astar", "apf"], default="astar")
     args = parser.parse_args()
     if args.gui:
         try:
@@ -27,7 +28,7 @@ def main() -> None:
     successes = 0
     for i in range(args.episodes):
         obs, _ = env.reset(seed=args.seed + i)
-        policy = OnlineAStarPolicy()
+        policy = OnlineAStarPolicy() if args.policy == "astar" else ArtificialPotentialFieldPolicy()
         finished = False
         last_info = None
         while not finished:
@@ -35,7 +36,7 @@ def main() -> None:
             finished = terminated or truncated
         successes += int(last_info["success"])
         print(f"episode={i} success={last_info['success']} steps={last_info['steps']}")
-    print(f"success_rate={successes / args.episodes:.3f}")
+    print(f"policy={args.policy} success_rate={successes / args.episodes:.3f}")
     env.close()
 
 
