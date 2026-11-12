@@ -30,6 +30,23 @@ from layanav.evaluation.difficulty import (
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder
 
+# Descriptive stratification only; these are heuristic bins, not calibrated difficulty.
+TORTUOSITY_BINS = ("direct", "moderate_detour", "large_detour")
+TORTUOSITY_THRESHOLDS = (1.25, 2.0)
+
+
+def tortuosity_bin(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if not math.isfinite(value) or value < 1 - 1e-9:
+        raise ValueError("path_tortuosity must be finite and >= 1")
+    if value < TORTUOSITY_THRESHOLDS[0]:
+        return "direct"
+    if value < TORTUOSITY_THRESHOLDS[1]:
+        return "moderate_detour"
+    return "large_detour"
+
+
 FAMILIES = ("sparse", "standard", "dense")
 FAMILY_LAYOUTS = {
     "sparse": (8, 2),
@@ -43,6 +60,7 @@ REPORT_FIELDS = (
     "termination_reason", "failure_reason", "last_policy_status",
     "stay_steps", "max_consecutive_stay", "revisits",
     "goal_distance_remaining", "failure_trace", "map_sha256", "spl",
+    "tortuosity_bin",
     *DIFFICULTY_METRICS,
 )
 
@@ -236,6 +254,7 @@ def run_episode(
         "spl": spl,
         "map_sha256": map_sha256,
         **difficulty,
+        "tortuosity_bin": tortuosity_bin(difficulty["path_tortuosity"]),
         "termination_reason": "goal_reached" if success else "time_limit",
         "failure_reason": failure_reason,
         "last_policy_status": last_policy_status,
@@ -415,6 +434,7 @@ def benchmark(
 
     rows: list[dict[str, Any]] = []
     summaries: dict[str, Any] = {}
+    tortuosity_rows: list[dict[str, Any]] = []
     for (topology, family), config in configurations.items():
         env = GridWorldEnv(config)
         try:
@@ -474,6 +494,37 @@ def benchmark(
                             successful, seed=bootstrap_seed, replicates=bootstrap_replicates
                         ) if successful.size else None
                     )
+                summary["tortuosity_groups"] = {}
+                if oracle_diagnostic:
+                    for band in TORTUOSITY_BINS:
+                        subset = [
+                            row for row in episode_rows if row["tortuosity_bin"] == band
+                        ]
+                        n = len(subset)
+                        success_stats = (
+                            wilson_success_ci(np.asarray([
+                                float(row["success"]) for row in subset
+                            ], dtype=np.float64)) if n else None
+                        )
+                        spl_stats = (
+                            bootstrap_mean_ci(np.asarray([
+                                float(row["spl"]) for row in subset
+                            ], dtype=np.float64), seed=bootstrap_seed,
+                                replicates=bootstrap_replicates) if n else None
+                        )
+                        summary["tortuosity_groups"][band] = {
+                            "episodes": n, "success": success_stats, "spl": spl_stats,
+                        }
+                        tortuosity_rows.append({
+                            "topology": topology, "family": family, "method": method,
+                            "tortuosity_bin": band, "episodes": n,
+                            "success_rate": success_stats["mean"] if n else None,
+                            "success_ci_low": success_stats["ci_low"] if n else None,
+                            "success_ci_high": success_stats["ci_high"] if n else None,
+                            "spl_mean": spl_stats["mean"] if n else None,
+                            "spl_ci_low": spl_stats["ci_low"] if n else None,
+                            "spl_ci_high": spl_stats["ci_high"] if n else None,
+                        })
                 summary["failure_reasons"] = {
                     reason: sum(row["failure_reason"] == reason for row in episode_rows)
                     for reason in sorted({
@@ -496,6 +547,19 @@ def benchmark(
         writer = csv.DictWriter(file, fieldnames=REPORT_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
+
+    if oracle_diagnostic:
+        with (output / "tortuosity_groups.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            fields = (
+                "topology", "family", "method", "tortuosity_bin", "episodes",
+                "success_rate", "success_ci_low", "success_ci_high",
+                "spl_mean", "spl_ci_low", "spl_ci_high",
+            )
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(tortuosity_rows)
 
     checkpoint_details: dict[str, Any] = {}
     for method in ("bc", "ppo", "laya"):
@@ -528,6 +592,12 @@ def benchmark(
             "topologies": list(topologies),
             "structured_map_generator_version": MAP_GENERATOR_VERSION,
             "route_bounds_are_graph_steps": True,
+            "tortuosity_bins": {
+                "direct": "T < 1.25",
+                "moderate_detour": "1.25 <= T < 2.0",
+                "large_detour": "T >= 2.0",
+            },
+            "tortuosity_bins_are_heuristic": True,
             "failure_reason_is_diagnostic": True,
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
@@ -547,6 +617,7 @@ def benchmark(
                 "straight_line_distance": "Euclidean start-to-goal distance",
                 "path_tortuosity": "shortest geometric route / straight-line distance",
                 "minimum_clearance": "minimum path-to-obstacle center distance in cells",
+                "mean_path_clearance": "mean path-to-obstacle center distance in cells",
                 "dead_end_count": "degree-one cells in start-reachable true-map component",
                 "reachable_free_cells": "number of start-reachable true-map free cells",
             },
