@@ -15,11 +15,17 @@ import time
 from dataclasses import asdict
 from itertools import pairwise
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any, Protocol
 
 import numpy as np
 
 from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv, action_count
+from layanav.evaluation.difficulty import (
+    DIFFICULTY_METRICS,
+    map_fingerprint,
+    measure_map_difficulty,
+)
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder
 
@@ -35,7 +41,8 @@ REPORT_FIELDS = (
     "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
     "termination_reason", "failure_reason", "last_policy_status",
     "stay_steps", "max_consecutive_stay", "revisits",
-    "goal_distance_remaining", "failure_trace",
+    "goal_distance_remaining", "failure_trace", "map_sha256", "spl",
+    *DIFFICULTY_METRICS,
 )
 
 
@@ -117,6 +124,10 @@ def run_episode(
     last_policy_status: str | None = None
     oracle_moves: int | None = None
     oracle_distance: float | None = None
+    map_sha256: str | None = None
+    difficulty: dict[str, float | int | None] = {
+        metric: None for metric in DIFFICULTY_METRICS
+    }
     if oracle_diagnostic:
         # Intentional privilege boundary: reporting-only lower bound.
         truth = env.debug_snapshot()
@@ -125,6 +136,16 @@ def run_episode(
             blocked, truth["robot"], truth["goal"], env.config.movement_mode
         )
         oracle_moves = len(path) - 1 if path else None
+        map_sha256 = map_fingerprint(
+            truth["static_map"], truth["hidden_obstacles"],
+            truth["robot"], truth["goal"], env.config.movement_mode,
+        )
+        if path:
+            difficulty = measure_map_difficulty(
+                truth["static_map"], truth["hidden_obstacles"],
+                truth["robot"], truth["goal"], path,
+                env.config.movement_mode, obs,
+            )
         oracle_distance = (
             sum(
                 math.hypot(x1 - x0, y1 - y0)
@@ -173,6 +194,10 @@ def run_episode(
         if success and oracle_distance is not None and info["distance_traveled"] > 0
         else None
     )
+    spl = (
+        (oracle_distance / max(oracle_distance, info["distance_traveled"]) if success else 0.0)
+        if oracle_distance is not None and oracle_distance > 0 else None
+    )
     if success:
         failure_reason = None
     elif last_policy_status in ("local_minimum", "blocked"):
@@ -203,6 +228,9 @@ def run_episode(
         "oracle_shortest_distance": oracle_distance,
         "distance_traveled": info["distance_traveled"],
         "oracle_efficiency": efficiency,
+        "spl": spl,
+        "map_sha256": map_sha256,
+        **difficulty,
         "termination_reason": "goal_reached" if success else "time_limit",
         "failure_reason": failure_reason,
         "last_policy_status": last_policy_status,
@@ -241,6 +269,29 @@ def bootstrap_mean_ci(
     low, high = np.quantile(estimates, [half, 1 - half])
     return {
         "mean": mean, "ci_low": float(low), "ci_high": float(high), "n": len(data),
+    }
+
+
+def wilson_success_ci(
+    values: np.ndarray, *, confidence: float = 0.95,
+) -> dict[str, float | int]:
+    """Two-sided Wilson score interval for independent binary successes."""
+    data = np.asarray(values, dtype=np.float64)
+    if data.ndim != 1 or not data.size or not np.isin(data, (0.0, 1.0)).all():
+        raise ValueError("Success observations must be a nonempty binary vector")
+    if not 0 < confidence < 1:
+        raise ValueError("Invalid confidence")
+    n = len(data)
+    p = float(data.mean())
+    z = NormalDist().inv_cdf((1 + confidence) / 2)
+    denominator = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denominator
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+    return {
+        "mean": p,
+        "ci_low": 0.0 if p == 0.0 else max(0.0, center - half),
+        "ci_high": 1.0 if p == 1.0 else min(1.0, center + half),
+        "n": n,
     }
 
 
@@ -385,18 +436,34 @@ def benchmark(
                     "success", "steps", "moves", "collisions", "total_reward",
                     "mean_inference_ms", "distance_traveled", "oracle_efficiency",
                     "stay_steps", "max_consecutive_stay", "revisits",
-                    "goal_distance_remaining",
+                    "goal_distance_remaining", "spl", *DIFFICULTY_METRICS,
                 ):
                     series = np.asarray([
                         float(row[metric]) if row[metric] is not None else np.nan
                         for row in episode_rows
                     ], dtype=np.float64)
                     valid = series[np.isfinite(series)]
-                    summary[metric] = (
-                        bootstrap_mean_ci(
+                    if not valid.size:
+                        summary[metric] = None
+                    elif metric == "success":
+                        summary[metric] = wilson_success_ci(valid)
+                    else:
+                        summary[metric] = bootstrap_mean_ci(
                             valid, seed=bootstrap_seed, replicates=bootstrap_replicates
                         )
-                        if valid.size else None
+                for output_name, source_metric in (
+                    ("successful_steps", "steps"),
+                    ("successful_moves", "moves"),
+                    ("successful_distance_traveled", "distance_traveled"),
+                ):
+                    successful = np.asarray([
+                        float(row[source_metric]) for row in episode_rows
+                        if row["success"]
+                    ], dtype=np.float64)
+                    summary[output_name] = (
+                        bootstrap_mean_ci(
+                            successful, seed=bootstrap_seed, replicates=bootstrap_replicates
+                        ) if successful.size else None
                     )
                 summary["failure_reasons"] = {
                     reason: sum(row["failure_reason"] == reason for row in episode_rows)
@@ -445,7 +512,7 @@ def benchmark(
                 }
 
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol": {
             "paired_map_seeds": True,
             "save_failure_traces": save_failures,
@@ -458,7 +525,20 @@ def benchmark(
             "diagonal_cost": "sqrt(2) for diagonal, 1 for cardinal",
             "corner_cutting": "forbidden",
             "oracle_is_privileged_diagnostic_only": oracle_diagnostic,
-            "confidence_interval": "95% percentile bootstrap across map seeds",
+            "confidence_interval": "95% percentile bootstrap for continuous metrics",
+            "success_confidence_interval": "95% Wilson score, independent episodes",
+            "spl": "mean(S * L / max(P, L)); L=true-map shortest distance",
+            "map_difficulty_is_privileged_diagnostic_only": oracle_diagnostic,
+            "map_difficulty_definitions": {
+                "obstacle_density": "blocked cells / all cells (includes outer boundary)",
+                "interior_obstacle_density": "blocked interior / interior cell count",
+                "initial_unknown_ratio": "unknown mask / initially non-prior-wall cells",
+                "straight_line_distance": "Euclidean start-to-goal distance",
+                "path_tortuosity": "shortest geometric route / straight-line distance",
+                "minimum_clearance": "minimum path-to-obstacle center distance in cells",
+                "dead_end_count": "degree-one cells in start-reachable true-map component",
+                "reachable_free_cells": "number of start-reachable true-map free cells",
+            },
             "bootstrap_replicates": bootstrap_replicates,
             "bootstrap_seed": bootstrap_seed,
             "policy_actions": "deterministic; argmax for neural, rule-based for classical",

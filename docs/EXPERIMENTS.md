@@ -49,6 +49,56 @@ Failed rollouts are saved as verified deterministic traces in `failures/`
 by default; disable using `--no-save-failures`. These JSON files contain
 **privileged full obstacle truth** for replay and are not training data.
 
+## Benchmark v2: statistical and difficulty definitions
+
+Summary schema `2` preserves historical method/topology keys, with new
+metrics alongside old outputs. Success `mean` is the observed Bernoulli
+proportion; its two-sided 95% interval uses the **Wilson score method**.
+A run with 20/20 successes has an interval narrower than `[0,1]` but
+**not** the degenerate interval `[1,1]`. Continuous metrics use the
+existing independent-episode percentile bootstrap (not a paired-difference
+CI); outputs include their non-null sample count `n`.
+
+For each episode with an oracle path, SPL is:
+
+```text
+SPL_i = success_i * L_i / max(P_i, L_i)
+```
+
+where `L_i` is the true-map shortest **geometric** route distance
+(cardinal 1, diagonal sqrt(2)) and `P_i` is actual distance traveled.
+A failed episode contributes zero to SPL. The mean uses **all episodes**.
+`oracle_efficiency` remains successful-only, while
+`successful_steps`, `successful_moves` and
+`successful_distance_traveled` summarize successful episodes only.
+When no episodes succeed, these summaries are null.
+
+`--oracle-diagnostic` is mandatory to calculate SPL and descriptive
+map complexity. Without it, these fields remain null. This privileged
+computation never feeds model inputs or action selection.
+
+Map metrics are evaluated once per episode from initial truth and the
+full-map optimal path; **they are not an experimentally validated scalar
+difficulty score**:
+
+| Key | Definition |
+| --- | --- |
+| `obstacle_density` | fraction blocked over full grid, *including perimeter* |
+| `interior_obstacle_density` | blocked fraction excluding perimeter |
+| `initial_unknown_ratio` | initially unobserved cells / cells not known as prior walls |
+| `straight_line_distance` | Euclidean distance between initial start and goal |
+| `path_tortuosity` | shortest geometric path length / straight-line distance |
+| `minimum_clearance` | smallest center-to-center distance from shortest-path cells to any blocked cell (not physical clearance) |
+| `dead_end_count` | count of graph-degree-one cells in the start-reachable true-map component, under active movement rules |
+| `reachable_free_cells` | size of that start-reachable component |
+| `map_sha256` | fingerprint of known and hidden map layers, start, goal, movement mode |
+
+Topologies are intentionally distributionally different. Do **not**
+interpret changes in success rate across topologies as the isolated
+effect of any one complexity metric. The U-Shape generator now varies
+start and goal positions across the closed barrier; prior U-Shape maps
+with identical seeds are not comparable across code revisions.
+
 ## Separation and fairness
 
 Use a disjoint set of map seeds for BC train, BC validation and benchmark. PPO stores the seed of its training RNG; evaluation uses a far-removed, explicitly recorded seed sequence. This does **not** mathematically guarantee distinct generated layouts, especially for small grids; choose nontrivial map families and consider checksums of generated maps in a future protocol extension.
