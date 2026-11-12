@@ -1,4 +1,4 @@
-"""Paired-seed navigation benchmark for A*, CNN/BC, and PPO.
+"""Paired-seed navigation benchmark for A*, APF, CNN/BC and PPO.
 
 Every method receives exactly the same six-channel policy observation,
 sensor mode, map family, timeout and collision semantics. Ground truth is
@@ -18,7 +18,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from layanav.envs import GridConfig, GridWorldEnv
-from layanav.planners import OnlineAStarPolicy
+from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 
 FAMILIES = ("sparse", "standard", "dense")
 FAMILY_LAYOUTS = {
@@ -173,9 +173,16 @@ def _sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def _create_policy(method: str, checkpoint: str | Path | None, device: str) -> NavigationPolicy:
+def _create_policy(
+    method: str,
+    checkpoint: str | Path | None,
+    device: str,
+    apf_config: APFConfig | None = None,
+) -> NavigationPolicy:
     if method == "astar":
         return OnlineAStarPolicy()
+    if method == "apf":
+        return ArtificialPotentialFieldPolicy(apf_config)
     if checkpoint is None:
         raise ValueError(f"{method} requires a checkpoint")
     if method == "bc":
@@ -208,6 +215,7 @@ def benchmark(
     bc_checkpoint: str | Path | None = None,
     ppo_checkpoint: str | Path | None = None,
     laya_checkpoint: str | Path | None = None,
+    apf_config: APFConfig | None = None,
     device: str = "cpu",
     oracle_diagnostic: bool = False,
     bootstrap_seed: int = 2026,
@@ -220,12 +228,15 @@ def benchmark(
         raise ValueError("methods must be nonempty and unique")
     if not families or len(set(families)) != len(families):
         raise ValueError("families must be nonempty and unique")
-    if set(methods) - {"astar", "bc", "ppo", "laya"}:
+    if set(methods) - {"astar", "apf", "bc", "ppo", "laya"}:
         raise ValueError("Unknown benchmark method")
     if set(families) - set(FAMILIES):
         raise ValueError("Unknown map family")
     checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint, "laya": laya_checkpoint}
-    policies = {method: _create_policy(method, checkpoints.get(method), device) for method in methods}
+    policies = {
+        method: _create_policy(method, checkpoints.get(method), device, apf_config)
+        for method in methods
+    }
     configurations = {
         family: make_family_config(
             family, size=size, radius=radius, sensor=sensor, max_steps=max_steps
@@ -324,6 +335,7 @@ def benchmark(
         },
         "families": {name: asdict(config) for name, config in configurations.items()},
         "methods": list(methods),
+        "apf_config": asdict(apf_config or APFConfig()) if "apf" in methods else None,
         "checkpoints": checkpoint_details,
         "summary": summaries,
     }
