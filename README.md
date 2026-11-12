@@ -326,6 +326,35 @@ These are **reporting-only privileged diagnostics**; without
 the legacy Random generator remains unchanged. Store the generator
 version, full configs, code commit, and maps for long-term comparison.
 
+## Verify pretrained Laya on the RTX 5070
+
+The repository includes a **real-checkpoint smoke probe** (no simulated
+pretraining results). In the correct local environment, first check PyTorch
+CUDA kernel support without downloading model weights, then test a
+frozen-pretrained-encoder BC optimizer step:
+
+```bash
+python -m pip install -e ".[train,laya]"
+
+python -m layanav.training.laya_smoke --device cuda --preflight-only \
+  --output results/laya_gpu_preflight.json
+
+USE_TF=0 python -m layanav.training.laya_smoke \
+  --model-id convaiinnovations/laya --device cuda \
+  --movement-mode 8 --batch-size 1 --token-grid 8 \
+  --output results/laya_gpu_smoke.json
+```
+
+Both steps return JSON and a nonzero process exit code on failure. The real
+step checks actual pretrained-weight loading, spatial token integration,
+forward/backward, trainable parameter update, inference, and CUDA VRAM;
+it refuses to classify an upstream CPU fallback as GPU success. First-time
+download is about 808 MB. Detailed instructions and limitations:
+[docs/LAYA_ADAPTER.md](docs/LAYA_ADAPTER.md).
+
+**A successful CI mock test cannot verify your RTX 5070.** Run these commands
+on your workstation and retain the JSON report.
+
 ## CNN + Behavior Cloning baseline (v0.3)
 
 The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).
