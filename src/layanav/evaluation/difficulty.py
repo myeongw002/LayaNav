@@ -105,8 +105,10 @@ def measure_map_difficulty(
         not (0 <= x < n and 0 <= y < n) or blocked[y, x] for x, y in path
     ):
         raise ValueError("Oracle path contains an invalid cell")
+    allowed = {DELTAS[action] for action in movement_actions(movement_mode)}
     if any(
-        not valid_transition(blocked, x0, y0, x1 - x0, y1 - y0)
+        (x1 - x0, y1 - y0) not in allowed
+        or not valid_transition(blocked, x0, y0, x1 - x0, y1 - y0)
         for (x0, y0), (x1, y1) in pairwise(path)
     ):
         raise ValueError("Oracle path violates motion constraints")
