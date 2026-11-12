@@ -166,7 +166,7 @@ def train_ppo(
             "schema_version": 1,
             "algorithm": "stable-baselines3 PPO CnnPolicy",
             "observation_shape": list(vec_env.observation_space.shape),
-            "action_count": vec_env.action_space.n,
+            "action_count": int(vec_env.action_space.n),
             "environment": asdict(env_config),
             "training": asdict(settings),
             "actual_timesteps": int(model.num_timesteps),
