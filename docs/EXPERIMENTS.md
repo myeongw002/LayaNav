@@ -23,6 +23,32 @@ This benchmark does not establish that a language-pretrained Decision Model tran
   APF parameters are saved in `summary.json` and must be tuned using
   seeds disjoint from the final evaluation set.
 
+## Structured topology evaluation and failure analysis
+
+Use `--topologies random maze corridor rooms u_shape cluttered` to
+evaluate each static topology as a separate map distribution. The legacy
+`random` default is unchanged, retaining historical seed-to-map samples.
+For structured topologies, a reachability check guarantees a path exists
+under the selected 4/8-way motion contract. Maze generation uses randomized
+DFS corridor carving; rooms have door openings, corridor maps use connected
+bands, U-shaped maps intentionally place the start inside the concavity,
+and cluttered layouts contain multi-cell obstacle rectangles.
+
+Non-random layouts use topology-specific wall geometry. Consequently, a
+`dense` Maze and a `dense` Random map are **not** controlled to have
+the same wall occupancy. Compare policies **within** each
+topology/family/movement-mode combination before attempting broad claims.
+
+Failure diagnostics distinguish the environment termination condition
+(`goal_reached` or `time_limit`) from an inferred failure attribution
+(`local_minimum`, `blocked`, `no_known_path`,
+`persistent_stay`, or `time_limit`). These categories are diagnostics
+based on final policy status and actions, not ground-truth causal proofs.
+Revisit counts exclude STAY actions; attempted collisions remain separate.
+Failed rollouts are saved as verified deterministic traces in `failures/`
+by default; disable using `--no-save-failures`. These JSON files contain
+**privileged full obstacle truth** for replay and are not training data.
+
 ## Separation and fairness
 
 Use a disjoint set of map seeds for BC train, BC validation and benchmark. PPO stores the seed of its training RNG; evaluation uses a far-removed, explicitly recorded seed sequence. This does **not** mathematically guarantee distinct generated layouts, especially for small grids; choose nontrivial map families and consider checksums of generated maps in a future protocol extension.

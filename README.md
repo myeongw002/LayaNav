@@ -138,6 +138,52 @@ No PyTorch is needed for APF. The optional unknown-cell penalty is
 heuristic and defaults to zero. The benchmark records APF parameters.
 See [docs/APF.md](docs/APF.md) for equations and limitations.
 
+## Map topologies and failure diagnostics
+
+The legacy seeded `random` map generator remains the default. Five
+additional static layout generators are available: `maze` (DFS-carved
+corridors), `corridor` (intersecting narrow paths), `rooms` (walled
+rooms with doors), `u_shape` (concave barrier with start inside and goal
+outside), and `cluttered` (multi-cell obstacle rectangles).
+
+Select **Topology** in the GUI and use **New map** to sample another layout.
+Changing topology generates a fresh map, whereas **Reset** preserves the
+current layout. All generated maps are validated for reachability with the
+active 4/8-way motion rules, including no corner cutting. Hidden obstacles
+remain simulator-private until detected by the sensor.
+
+For structured maps, start/goal are selected from reachable cells with a
+minimum graph-distance constraint. The U-shape layout instead uses a
+deliberately challenging start/goal pair across the closed side. **Map
+topologies do not have equal obstacle distributions** and are separate
+evaluation conditions. `--families sparse standard dense` controls hidden
+obstacle counts, but non-random structural walls are topology-specific.
+
+```bash
+python -m layanav.evaluation.cli \
+  --methods astar apf --movement-mode 8 \
+  --topologies random maze corridor rooms u_shape cluttered \
+  --families sparse standard dense --episodes 10 \
+  --sensor raycast --max-steps 256 \
+  --output-dir results/topology_baseline
+```
+
+The benchmark records each episode's `termination_reason`,
+`failure_reason` (diagnostic attribution, not a mathematically proven
+cause), `last_policy_status`, `stay_steps`,
+`max_consecutive_stay`, `revisits` (cell revisits after movement), and
+`goal_distance_remaining`. For failed episodes, it automatically saves
+`failures/<topology>_<family>_<method>_seed_<seed>.json` using the existing
+replay-compatible trace format. Open those files using **Load replay** in
+the GUI to inspect the exact failed rollout; the failure reason is shown
+when playback finishes. Traces contain **privileged full maps** solely for
+debug/replay, not learning.
+
+Disable trace capture with `--no-save-failures` for large benchmark runs
+or privacy-limited environments. Existing default Random benchmarks retain
+the original summary keys (for example `dense/apf`); other topologies use
+`maze/dense/apf` etc.
+
 ## CNN + Behavior Cloning baseline (v0.3)
 
 The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).
