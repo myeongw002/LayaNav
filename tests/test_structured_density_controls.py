@@ -10,7 +10,7 @@ import pytest
 
 from layanav.envs import GridConfig, GridWorldEnv
 from layanav.envs.map_generation import _distances
-from layanav.evaluation.benchmark import make_family_config
+from layanav.evaluation.benchmark import benchmark, make_family_config
 from layanav.evaluation.difficulty import map_fingerprint
 from layanav.planners import OnlineAStarPolicy
 
@@ -117,3 +117,28 @@ def test_legacy_random_unchanged_for_known_seed():
         snap["static_map"], snap["hidden_obstacles"],
         snap["robot"], snap["goal"], cfg.movement_mode,
     ) == "be686be0f6a4c62d213f90708ead8c129f13e36c34f93b69064dad2393245d0b"
+
+
+def test_benchmark_prior_layout_hashes_match_across_structured_density(tmp_path):
+    report = benchmark(
+        methods=("astar",), topologies=("maze", "corridor"),
+        families=("sparse", "standard", "dense"),
+        episodes=2, eval_seed=300000,
+        size=16, radius=2, sensor="raycast", movement_mode=8,
+        max_steps=30, save_failures=False, oracle_diagnostic=True,
+        bootstrap_replicates=100, output_dir=tmp_path,
+    )
+    import csv
+
+    with (tmp_path / "episodes.csv").open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    for topology in ("maze", "corridor"):
+        for seed in (300000, 300001):
+            matches = [
+                row for row in rows
+                if row["topology"] == topology and int(row["seed"]) == seed
+            ]
+            assert len(matches) == 3
+            assert len({row["prior_layout_sha256"] for row in matches}) == 1
+            assert len({row["map_sha256"] for row in matches}) == 3
+    assert report["protocol"]["structured_map_generator_version"] == 2
