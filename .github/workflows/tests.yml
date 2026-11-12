@@ -56,4 +56,4 @@ jobs:
       - name: Install package and tests
         run: python -m pip install -e ".[train,ppo,dev]"
       - name: CPU behavior-cloning smoke
-        run: pytest -q tests/test_training.py tests/test_ppo.py
+        run: pytest -q tests/test_training.py tests/test_ppo.py tests/test_laya_spatial.py tests/test_laya_bc.py
