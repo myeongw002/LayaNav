@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from collections.abc import Callable
 
 import numpy as np
@@ -139,7 +140,7 @@ class MainWindow(QMainWindow):
         self.resize(1040, 650)
         self.env = GridWorldEnv(GridConfig())
         self.env.reset(seed=42)
-        self.policy = OnlineAStarPolicy()
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self.apf_policy = ArtificialPotentialFieldPolicy()
         self.recorder: EpisodeRecorder | None = None
         self.replay: ReplaySession | None = None
@@ -179,6 +180,13 @@ class MainWindow(QMainWindow):
         self.sensor_mode.currentIndexChanged.connect(self._change_sensor_mode)
         controls.addWidget(QLabel("Sensor:"))
         controls.addWidget(self.sensor_mode)
+
+        self.movement_mode = QComboBox()
+        self.movement_mode.addItem("4-way", 4)
+        self.movement_mode.addItem("8-way", 8)
+        self.movement_mode.currentIndexChanged.connect(self._change_movement_mode)
+        controls.addWidget(QLabel("Movement:"))
+        controls.addWidget(self.movement_mode)
 
         self.play_button = QPushButton("Play")
         self.play_button.clicked.connect(self._toggle_play)
@@ -235,15 +243,19 @@ class MainWindow(QMainWindow):
                    "Grey: prior wall   Dark grey: not observed")
         )
         root.addWidget(
-            QLabel("Edit by clicking Ground Truth. Use Play for A*, or switch to Manual "
-                   "and use arrow keys. Editing resets the episode.")
+            QLabel(
+                "Edit Ground Truth map; Play selects A* or APF. Manual: arrow keys = 4-way, "
+                "Q/E/Z/C = diagonal in 8-way. Changing movement resets the episode."
+            )
         )
         self._start_episode()
         self._update_view()
 
     def _start_episode(self) -> None:
         self.replay = None
-        self.apf_policy = ArtificialPotentialFieldPolicy()
+        self.apf_policy = ArtificialPotentialFieldPolicy(
+            movement_mode=self.env.config.movement_mode
+        )
         self.recorder = EpisodeRecorder(self.env)
         if self.mode.currentIndex() == 2:
             self.mode.setCurrentIndex(0)
@@ -298,6 +310,12 @@ class MainWindow(QMainWindow):
         sensor_index = self.sensor_mode.findData(self.env.config.sensor_mode)
         self.sensor_mode.setCurrentIndex(sensor_index)
         self.sensor_mode.blockSignals(False)
+        self.movement_mode.blockSignals(True)
+        self.movement_mode.setCurrentIndex(
+            self.movement_mode.findData(self.env.config.movement_mode)
+        )
+        self.movement_mode.blockSignals(False)
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self.mode.setCurrentIndex(2)
         self.total_reward = 0.0
         self._update_view()
@@ -324,6 +342,29 @@ class MainWindow(QMainWindow):
     def _change_sensor_mode(self, index: int) -> None:
         self.env.config.sensor_mode = self.sensor_mode.itemData(index)
         self._reset_same_map()
+
+    def _change_movement_mode(self, index: int) -> None:
+        """Switch action-space size safely while preserving the editor map."""
+        mode = self.movement_mode.itemData(index)
+        if mode == self.env.config.movement_mode:
+            return
+        snapshot = self.env.debug_snapshot()
+        layout = {
+            "static_map": snapshot["static_map"],
+            "hidden_obstacles": snapshot["hidden_obstacles"],
+            "start": self.start,
+            "goal": snapshot["goal"],
+        }
+        candidate = GridWorldEnv(replace(self.env.config, movement_mode=mode))
+        candidate.reset(options=layout)
+        self._stop()
+        self.env = candidate
+        self.truth_canvas.env = candidate
+        self.belief_canvas.env = candidate
+        self.policy = OnlineAStarPolicy(mode)
+        self.total_reward = 0.0
+        self._start_episode()
+        self._update_view()
 
     def _save_map(self, path: str) -> None:
         snap = self.env.debug_snapshot()
@@ -354,6 +395,7 @@ class MainWindow(QMainWindow):
             size=size,
             observation_radius=self.radius.value(),
             sensor_mode=self.sensor_mode.currentData(),
+            movement_mode=self.movement_mode.currentData(),
             hidden_obstacle_count=min(24, (size - 2) ** 2 // 8),
             known_wall_segments=min(5, size // 2),
             max_steps=self.env.config.max_steps,
@@ -365,7 +407,7 @@ class MainWindow(QMainWindow):
         self.truth_canvas.env = candidate
         self.belief_canvas.env = candidate
         self.start = layout["start"]
-        self.policy = OnlineAStarPolicy()
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self.total_reward = 0.0
         self._start_episode()
         self._update_view()
@@ -392,7 +434,7 @@ class MainWindow(QMainWindow):
             }
         )
         self.total_reward = 0.0
-        self.policy = OnlineAStarPolicy()
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self._start_episode()
         self._update_view()
 
@@ -401,7 +443,7 @@ class MainWindow(QMainWindow):
         self.env.reset(seed=int(np.random.default_rng().integers(0, 2**31)))
         self.start = self.env.debug_snapshot()["robot"]
         self.total_reward = 0.0
-        self.policy = OnlineAStarPolicy()
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self._start_episode()
         self._update_view()
 
@@ -441,7 +483,7 @@ class MainWindow(QMainWindow):
             return
         self.start = start
         self.total_reward = 0.0
-        self.policy = OnlineAStarPolicy()
+        self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self._start_episode()
         self._update_view()
 
@@ -514,6 +556,11 @@ class MainWindow(QMainWindow):
                 Qt.Key.Key_Up: 0, Qt.Key.Key_Down: 1,
                 Qt.Key.Key_Left: 2, Qt.Key.Key_Right: 3,
             }
+            if self.env.config.movement_mode == 8:
+                key_to_action.update({
+                    Qt.Key.Key_Q: 5, Qt.Key.Key_E: 6,
+                    Qt.Key.Key_Z: 7, Qt.Key.Key_C: 8,
+                })
             action = key_to_action.get(event.key())
             if action is not None:
                 self._apply_action(action)
@@ -540,7 +587,9 @@ class MainWindow(QMainWindow):
             f"position {snap['robot']} | goal {snap['goal']} | "
             f"reward {self.total_reward:.2f} | "
             f"discovered {int(snap['discovered_obstacles'].sum())} | "
-            f"sensor {self.env.config.sensor_mode}"
+            f"sensor {self.env.config.sensor_mode} | "
+            f"motion {self.env.config.movement_mode}-way | "
+            f"distance {snap['distance_traveled']:.2f}"
             + suffix
         )
 
