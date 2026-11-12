@@ -186,7 +186,11 @@ make detours possible, the generator does not isolate replanning quality
 from navigation/observation policy. Cross-topology conclusions require
 held-out seeds and per-topology difficulty distributions. The v3
 structured seeds are not identical to v2; do not infer improvements
-from two benchmark results with different generated maps.
+from two benchmark results with different generated maps. Additionally,
+strict replanning or Oracle budget filtering may reject different candidate
+maps for sparse/standard/dense families, so **equal seeds do not guarantee
+identical prior geometry across densities**. Verify `prior_layout_sha256`
+before making nested-density comparisons.
 
 ## Separation and fairness
 
