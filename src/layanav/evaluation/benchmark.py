@@ -11,9 +11,9 @@ import csv
 import hashlib
 import json
 import math
-from itertools import pairwise
 import time
 from dataclasses import asdict
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Protocol
 
