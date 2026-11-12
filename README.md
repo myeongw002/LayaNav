@@ -9,7 +9,8 @@ An experimental platform for **partially observable grid navigation** with onlin
 - Selectable ideal circular or occlusion-aware Bresenham raycast sensor (radius 5 by default)
 - Five discrete actions: up, down, left, right, stay
 - Online A* that replans on the **belief map**, not privileged ground truth
-- Optional PySide6 desktop map viewer/editor with manual and A* modes, sensor selection, JSON map import/export
+- PySide6 desktop map editor with sensor selection, JSON map import/export, planned A* path, visited trail and adjustable playback speed
+- Deterministic episode recording and replay with observation/reward consistency checks
 - Tests for reproducibility, limited sensing, mapping, collision behavior, and replanning
 
 **The GUI's ground-truth panel is privileged debug visualization; policies must never receive it.**
@@ -53,6 +54,12 @@ Unknown static obstacles are sampled at episode reset, never move during the epi
 The GUI can save and load a JSON map containing the entire simulator layout: a schema version, square map size, known static walls, **privileged** hidden obstacle positions, initial robot position and goal. The file is for environment construction only; do not pass this file or its full obstacle contents into the policy or teacher. The `load_map` and `save_map` APIs validate dimensions, positions, binary cells and schema version.
 
 The `circle` sensor sees every cell inside its radius, regardless of walls. The `raycast` sensor uses center-to-center Bresenham rays blocked by known walls **and** hidden obstacles: the obstacle surface is visible, but cells behind it remain unobserved. This is a discrete geometric approximation, not a full LiDAR or physics model. All discovered static obstacle cells remain in the belief map after leaving sensor range. Switching sensor modes resets the episode without replacing its layout.
+
+## Episode recording and replay
+
+In LayaNav Studio, select **Online A*** and click **Play/Step** to navigate. The yellow line is the latest A* belief-map path, and the purple trail shows visited positions. **Save episode** writes a replayable JSON trace containing actions, rewards, observation SHA-256 digests, sensor settings and the initial map layout. **Load replay** reconstructs the environment and lets you replay/verify steps; its action sequence cannot be modified during replay. Speed is adjustable in steps per second.
+
+**Security and research isolation:** Episode JSON stores the simulator's *complete obstacle truth* for deterministic replays. It is privileged debug data, not a policy observation or training input. The 6-channel policy observation remains separate. The trace records hashes rather than embedding every full observation; the same observations are regenerated and verified at replay time.
 
 ## Roadmap
 

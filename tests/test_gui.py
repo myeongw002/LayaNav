@@ -58,6 +58,27 @@ def test_gui_start_edit_step_and_reset(tmp_path):
     assert window.env.config.sensor_mode == "raycast"
     window._reset_same_map()
     assert window.env.debug_snapshot()["robot"] == window.start
+    # Record a policy step, restore its initial map and replay exactly.
+    window.mode.setCurrentIndex(0)
+    window._tick()
+    assert window.recorder is not None
+    assert len(window.recorder.steps) == 1
+    assert len(window.trail) == 2
+    assert window.belief_canvas.path
+
+    episode_path = tmp_path / "episode.json"
+    window._save_episode(str(episode_path))
+    expected_position = window.env.debug_snapshot()["robot"]
+    window._load_episode(str(episode_path))
+    assert window.mode.currentIndex() == 2
+    assert window.replay is not None
+    window._tick()
+    assert window.env.debug_snapshot()["robot"] == expected_position
+    assert window.replay.finished
+
+    window._reset_same_map()
+    assert window.mode.currentIndex() == 0
+    assert window.replay is None
     window.close()
     window.deleteLater()
     app.processEvents()
