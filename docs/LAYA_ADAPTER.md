@@ -96,17 +96,52 @@ state-dict roundtrip, BC training and benchmark integration. It does not
 download 808 MB pretrained weights, and cannot certify compatibility of
 your exact Laya/Transformers/CUDA versions.
 
-An explicit command runs one actual pretrained-weight forward/backward pass:
+An explicit command tests the actual pretrained checkpoint on the local
+CUDA GPU. First run a *kernel-level preflight* without downloading the weights:
 
 ```bash
+# In the environment that runs LayaNav. Use the official CUDA-enabled
+# PyTorch build appropriate for your NVIDIA driver and RTX 5070.
+python -m pip install -e ".[train,laya]"
+
 python -m layanav.training.laya_smoke \
-  --model-id convaiinnovations/laya \
-  --device cuda --batch-size 1 --token-grid 8 --grid-size 32
+  --device cuda --preflight-only --output results/laya_gpu_preflight.json
 ```
 
-It reports resolved model revision, logits/value shape, the adapter gradient,
-forward/backward latency and peak allocated/reserved CUDA memory.
-It does **not** claim goal-reaching ability, a valid RL critic or calibrated decisions.
+Ensure the report says `kernel_test: passed` and shows the expected GPU
+and compute capability (RTX 5070 typically SM 12.0). A CUDA-visible device
+does not imply a working PyTorch kernel.
+
+Then run the **real pretrained weight** test (download about 808 MB on first use):
+
+```bash
+USE_TF=0 python -m layanav.training.laya_smoke \
+  --model-id convaiinnovations/laya \
+  --device cuda --movement-mode 8 --batch-size 1 \
+  --token-grid 8 --feature-channels 64 --grid-size 32 \
+  --seed 42 --output results/laya_gpu_smoke.json
+```
+
+This tests the frozen backbone's real `inputs_embeds` path, requires
+finite actor/critic outputs, nonzero finite **tokenizer and actor**
+gradients, a successful AdamW optimizer update, and valid inference
+action ID. It reports resolved model revision, torch/CUDA/Transformers/Laya
+versions, GPU capability, separate load/forward/backward/inference
+latencies, peak device memory and trainable adapter/actor gradients.
+The `--output` JSON is saved on success **and** validation failure.
+Failure exits nonzero with the actual exception. The script detects and
+**rejects silent upstream CPU fallback** when CUDA is requested.
+
+If you see CUDA compatibility warnings or `no kernel image is available`,
+update the CUDA-enabled PyTorch wheel from the official installer:
+https://pytorch.org/get-started/locally/
+For memory issues, retry with `--token-grid 4 --batch-size 1`.
+Use a real Hub commit in `--revision` for reproducible follow-up
+experiments. The upstream Laya project documents `USE_TF=0` to avoid
+an import hang if TensorFlow is installed.
+
+A `passed` report is an **integration test**, not evidence of successful
+navigation, pretrained transfer, an accurate critic, or a trained policy.
 
 The next required validation is a real pretrained Laya forward/backward
 run on Ubuntu 24.04 / RTX 5070 (12GB), measuring peak GPU memory and

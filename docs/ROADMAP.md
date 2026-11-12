@@ -54,7 +54,8 @@
 - [x] Numeric/spatial encoder: 6-channel grid → spatial tokens
 - [x] Adapter into Laya encoder interface and configurable 5/9-action/critic heads (mock-backbone CI only)
 - [x] Frozen-encoder behavior cloning and adapter-only checkpointing
-- [ ] Real checkpoint RTX 5070 forward/backward, GPU memory/latency measurement
+- [x] Strict real-checkpoint CUDA preflight and reproducible GPU smoke command (CI mock-tested)
+- [ ] Actual RTX 5070 pretrained-weight forward/backward and GPU memory/latency measurement (requires local GPU run)
 - [ ] PPO logprobs and actor/critic training with spatial Laya
 - [x] Gradient tests and belief-only data path with tiny stand-in backbone
 

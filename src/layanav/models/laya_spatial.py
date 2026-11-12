@@ -199,6 +199,22 @@ def load_laya_backbone(
         raise TypeError("Loaded Laya checkpoint does not expose model.encoder")
     if not hasattr(getattr(backbone, "config", None), "hidden_size"):
         raise RuntimeError("Loaded Laya encoder has no config.hidden_size")
+    # Upstream Laya may silently demote a failed CUDA placement to CPU.
+    # A validation run must NEVER report that fallback as GPU compatibility.
+    try:
+        first_parameter = next(backbone.parameters())
+    except StopIteration as exc:
+        raise RuntimeError("Loaded Laya encoder has no parameters") from exc
+    requested_device = torch.device(device)
+    actual_device = first_parameter.device
+    if actual_device.type != requested_device.type or (
+        requested_device.index is not None and actual_device.index != requested_device.index
+    ):
+        raise RuntimeError(
+            "Laya checkpoint device mismatch: requested "
+            f"{requested_device}, got {actual_device}. Upstream Laya may have "
+            "fallen back to CPU; verify the CUDA-enabled PyTorch wheel and GPU architecture."
+        )
     source = {
         "model_id": model_id,
         "requested_revision": revision,
@@ -206,5 +222,8 @@ def load_laya_backbone(
         "package_version": importlib.metadata.version("laya"),
         "backbone_class": type(backbone).__name__,
         "hidden_size": int(backbone.config.hidden_size),
+        "backbone_dtype": str(first_parameter.dtype),
+        "backbone_device": str(actual_device),
+        "backbone_parameter_count": sum(p.numel() for p in backbone.parameters()),
     }
     return backbone, source
