@@ -243,6 +243,8 @@ class MainWindow(QMainWindow):
     def _start_episode(self) -> None:
         self.replay = None
         self.recorder = EpisodeRecorder(self.env)
+        if self.mode.currentIndex() == 2:
+            self.mode.setCurrentIndex(0)
         self.trail = [self.env.debug_snapshot()["robot"]]
         self.truth_canvas.trail = self.trail
         self.belief_canvas.trail = self.trail
