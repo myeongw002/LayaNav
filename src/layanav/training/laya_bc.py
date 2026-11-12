@@ -23,7 +23,7 @@ from layanav.models.laya_spatial import (
     SpatialLayaPolicy,
     load_laya_backbone,
 )
-from layanav.training.dataset import load_dataset
+from layanav.training.dataset import load_dataset, load_dataset_movement_mode
 
 
 def _validate_seed_split(
@@ -58,6 +58,10 @@ def train_laya_bc(
     if not source.get("model_id"):
         raise ValueError("source must identify the pretrained Laya backbone")
 
+    train_mode = load_dataset_movement_mode(train_data)
+    val_mode = load_dataset_movement_mode(validation_data)
+    if train_mode != val_mode or train_mode != model.movement_mode:
+        raise ValueError("Train/validation/model movement_mode must match")
     train_obs, train_act, train_seeds = load_dataset(train_data)
     val_obs, val_act, val_seeds = load_dataset(validation_data)
     _validate_seed_split(train_seeds, val_seeds)
@@ -137,6 +141,7 @@ def train_laya_bc(
                     "schema_version": 1,
                     "adapter_state": model.adapter_state_dict(),
                     "adapter_config": asdict(model.config),
+                    "movement_mode": model.movement_mode,
                     "source": dict(source),
                     "grid_shape": list(train_obs.shape[1:]),
                     "training_seed": seed,
@@ -176,7 +181,9 @@ def load_laya_adapter(
     config = SpatialAdapterConfig(**saved["adapter_config"])
     if not config.freeze_backbone:
         raise ValueError("Adapter checkpoint requires frozen backbone")
-    model = SpatialLayaPolicy(backbone, config).to(device)
+    model = SpatialLayaPolicy(
+        backbone, config, movement_mode=int(saved.get("movement_mode", 4))
+    ).to(device)
     model.load_adapter_state_dict(saved["adapter_state"])
     model.eval()
     return model, saved
