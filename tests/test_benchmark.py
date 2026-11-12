@@ -81,7 +81,7 @@ def test_benchmark_writes_paired_seed_csv_json(tmp_path):
     with (tmp_path / "episodes.csv").open(encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     assert len(rows) == 6
-    assert set(int(row["seed"]) for row in rows) == {10001, 10002, 10003}
+    assert {int(row["seed"]) for row in rows} == {10001, 10002, 10003}
     with (tmp_path / "summary.json").open(encoding="utf-8") as file:
         saved = json.load(file)
     assert saved["summary"] == report["summary"]
