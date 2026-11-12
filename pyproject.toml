@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 gui = ["PySide6>=6.7,<7"]
 train = ["torch>=2.7,<3"]
+ppo = ["stable-baselines3>=2.9.2,<3"]
 dev = ["pytest>=8,<10", "ruff>=0.9"]
 # Install a CUDA-compatible PyTorch build separately before future Laya training.
 

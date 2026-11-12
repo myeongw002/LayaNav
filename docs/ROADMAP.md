@@ -28,16 +28,17 @@
 - [x] GUI path overlay, visited trajectory and adjustable simulation speed
 - [x] Deterministic episode JSON recorder and verified replay in GUI
 - [ ] Richer diagnostics, replay seek/scrub and map-generation presets
-- Robust evaluation suite across controlled map difficulty and seeds
+- [x] Paired-seed bootstrap benchmark across controlled map families and held-out seeds
 
 ## Milestone v0.3 — classical and neural baselines
 
-- Online A* evaluation/benchmark runner
+- [x] Online A* / BC / PPO paired-seed benchmark and CSV/JSON reports
 - [x] CNN+MLP imitation-learning policy, compact datasets, CLI and checkpoints
-- CNN+PPO policy; optional recurrent baseline
+- [x] CNN+PPO policy with Gymnasium-compatible custom spatial extractor
+- [ ] Optional recurrent PPO baseline
 - [x] Ensure teacher sees the same belief map, not simulator ground truth
 - [x] Split trajectories by map seed and measure step-level inference latency
-- [ ] Add DAgger for recovery from policy-induced distribution shift and broader benchmark reports
+- [ ] Add DAgger for recovery from policy-induced distribution shift
 
 ## Milestone v0.4 — Laya spatial adaptation
 
