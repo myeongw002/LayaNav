@@ -164,7 +164,7 @@ def smoke(
     optimizable = [
         parameter for name, parameter in model.named_parameters()
         if parameter.requires_grad and (
-            name.startswith("tokenizer.") or name.startswith("actor.")
+            name.startswith(("tokenizer.", "actor."))
         )
     ]
     if not optimizable:
