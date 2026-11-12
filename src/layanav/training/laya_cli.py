@@ -15,8 +15,8 @@ from layanav.models.laya_spatial import (
     SpatialLayaPolicy,
     load_laya_backbone,
 )
-from layanav.training.laya_bc import train_laya_bc
 from layanav.training.dataset import load_dataset_movement_mode
+from layanav.training.laya_bc import train_laya_bc
 
 
 def main() -> None:
