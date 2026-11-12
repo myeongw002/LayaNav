@@ -272,6 +272,8 @@ def generate_structured_layout(
     if config.topology not in MAP_TOPOLOGIES or config.topology == "random":
         raise ValueError("Expected a non-random structured topology")
     n = config.size
+    if config.hidden_obstacle_count > (n - 2) ** 2 - 2:
+        raise ValueError("hidden_obstacle_count exceeds available free cells")
     lower = config.min_route_steps
     upper = config.max_route_steps
     for _ in range(400):
