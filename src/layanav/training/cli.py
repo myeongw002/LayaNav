@@ -17,6 +17,9 @@ def _environment(args: argparse.Namespace) -> GridConfig:
         topology=args.topology,
         min_route_steps=args.min_route_steps,
         max_route_steps=args.max_route_steps,
+        maze_loop_count=args.maze_loops,
+        replanning_mode=args.replanning_mode,
+        oracle_step_reserve=args.oracle_step_reserve,
         hidden_obstacle_count=args.hidden_obstacles,
         max_steps=args.max_steps,
         known_wall_segments=args.wall_segments,
@@ -34,6 +37,9 @@ def _environment_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--min-route-steps", type=int)
     parser.add_argument("--max-route-steps", type=int)
+    parser.add_argument("--maze-loops", type=int)
+    parser.add_argument("--replanning-mode", choices=["off", "required"], default="off")
+    parser.add_argument("--oracle-step-reserve", type=int)
 
 
 def main() -> None:

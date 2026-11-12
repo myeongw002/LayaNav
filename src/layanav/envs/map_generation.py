@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 MAP_TOPOLOGIES = (
     "random", "maze", "corridor", "rooms", "u_shape", "cluttered",
 )
-MAP_GENERATOR_VERSION = 2  # Structured layouts change; legacy random is unchanged.
+MAP_GENERATOR_VERSION = 3  # Structured seed-to-map changes; legacy Random is unchanged.
 
 
 def _empty_walls(n: int) -> np.ndarray:
@@ -48,6 +48,35 @@ def _maze(n: int, rng: np.random.Generator) -> np.ndarray:
         wall[(y + ny) // 2, (x + nx) // 2] = False
         wall[ny, nx] = False
         stack.append((nx, ny))
+    return wall
+
+
+def _add_maze_loops(
+    wall: np.ndarray, rng: np.random.Generator, count: int,
+) -> np.ndarray:
+    """Open existing walls between two carved corridors to form cycles.
+
+    Every candidate bridges a pair of already connected maze cells, so
+    opening it cannot disconnect the known-free component.
+    """
+    if count == 0:
+        return wall
+    n = wall.shape[0]
+    candidates = []
+    for y in range(1, n - 1):
+        for x in range(1, n - 1):
+            if not wall[y, x]:
+                continue
+            horizontal = not wall[y, x - 1] and not wall[y, x + 1]
+            vertical = not wall[y - 1, x] and not wall[y + 1, x]
+            if horizontal or vertical:
+                candidates.append((x, y))
+    if not candidates:
+        return wall
+    selected = rng.choice(len(candidates), size=min(count, len(candidates)), replace=False)
+    for idx in selected:
+        x, y = candidates[int(idx)]
+        wall[y, x] = False
     return wall
 
 
@@ -259,6 +288,93 @@ def _connected_hidden_obstacles(
     return hidden
 
 
+def _initial_path_hidden_hits(
+    prior: np.ndarray,
+    hidden: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    movement_mode: int,
+    observation_radius: int,
+    sensor_mode: str,
+) -> int:
+    """Count unseen hidden obstacles on the initial belief-map A* route.
+
+    The sensor may already reveal some blockers at reset. Those must not
+    count as an unexpected obstruction requiring replanning.
+    """
+    from layanav.envs.sensor import visibility_mask
+    from layanav.planners.astar import OnlineAStarPolicy
+
+    visible = visibility_mask(
+        prior | hidden, start, observation_radius, sensor_mode,
+    )
+    initial_belief = prior | (hidden & visible)
+    initial_route = OnlineAStarPolicy._find_path(
+        initial_belief, start, goal, movement_mode,
+    )
+    return sum(
+        bool(hidden[y, x] and not visible[y, x])
+        for x, y in initial_route
+    )
+
+
+def _replanning_hidden_obstacles(
+    prior: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    config: GridConfig,
+    rng: np.random.Generator,
+) -> np.ndarray | None:
+    """Create hidden blockers on the initially preferred route with a detour.
+
+    A target must lie beyond the start sensor's initial view, must not be a
+    cardinal articulation cell, and must appear on a planned route when
+    only initially visible blockers are known. The whole cardinal
+    start-reachable component remains connected after blocker insertion.
+
+    This is an initial-plan obstruction proxy, *not* a proof the executed
+    policy must collide or waste an action before replanning.
+    """
+    from layanav.envs.sensor import visibility_mask
+    from layanav.planners.astar import OnlineAStarPolicy
+
+    prior_route = OnlineAStarPolicy._find_path(
+        prior, start, goal, config.movement_mode,
+    )
+    initial_visible = visibility_mask(
+        prior, start, config.observation_radius, config.sensor_mode,
+    )
+    eligible = [
+        (x, y) for x, y in prior_route[1:-1]
+        if not initial_visible[y, x]
+    ]
+    if not eligible:
+        return None
+
+    prior_component_size = len(_distances(prior, start, 4))
+    for i in rng.permutation(len(eligible)):
+        x, y = eligible[int(i)]
+        blocked = prior.copy()
+        blocked[y, x] = True
+        if len(_distances(blocked, start, 4)) != prior_component_size - 1:
+            continue  # Articulation point: would disconnect free space.
+        try:
+            remaining = _connected_hidden_obstacles(
+                blocked, start, goal,
+                config.hidden_obstacle_count - 1, rng,
+            )
+        except (ValueError, RuntimeError):
+            continue
+        remaining[y, x] = True
+        if _initial_path_hidden_hits(
+            prior, remaining, start, goal,
+            config.movement_mode, config.observation_radius,
+            config.sensor_mode,
+        ) > 0:
+            return remaining
+    return None
+
+
 def generate_structured_layout(
     config: GridConfig, rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int], tuple[int, int]]:
@@ -276,10 +392,20 @@ def generate_structured_layout(
         raise ValueError("hidden_obstacle_count exceeds available free cells")
     lower = config.min_route_steps
     upper = config.max_route_steps
+    if config.oracle_step_reserve is not None:
+        oracle_budget = config.max_steps - config.oracle_step_reserve
+        upper = min(upper, oracle_budget) if upper is not None else oracle_budget
+        if lower is not None and lower > upper:
+            raise ValueError("Route bounds exceed the oracle step budget")
     for _ in range(400):
         fixed: tuple[tuple[int, int], tuple[int, int]] | None = None
         if config.topology == "maze":
             prior = _maze(n, rng)
+            loops = (
+                max(2, n // 2) if config.maze_loop_count is None
+                else config.maze_loop_count
+            )
+            prior = _add_maze_loops(prior, rng, loops)
         elif config.topology == "corridor":
             prior = _corridor(n, rng)
         elif config.topology == "rooms":
@@ -312,9 +438,16 @@ def generate_structured_layout(
             # Only cells that preserve cardinal connectivity are eligible.
             continue
         try:
-            hidden = _connected_hidden_obstacles(
-                prior, start, goal, config.hidden_obstacle_count, rng,
-            )
+            if config.replanning_mode == "required":
+                hidden = _replanning_hidden_obstacles(
+                    prior, start, goal, config, rng,
+                )
+                if hidden is None:
+                    continue
+            else:
+                hidden = _connected_hidden_obstacles(
+                    prior, start, goal, config.hidden_obstacle_count, rng,
+                )
         except RuntimeError:
             # The selected pair protected nearly the whole spanning tree.
             # Resample rather than silently reducing hidden obstacle count.
@@ -325,7 +458,7 @@ def generate_structured_layout(
                 continue
         return prior, hidden, start, goal
     raise RuntimeError(
-        "Unable to meet structured map route/size constraints "
-        "without disconnecting the map; reduce hidden obstacles "
-        "or loosen route-step bounds"
+        "Unable to meet structured map requirements (route budget, "
+        "replanning target or connectivity). Increase maze loops, lower "
+        "obstacle count, raise max_steps or relax constraints"
     )

@@ -149,6 +149,49 @@ additional `mean_path_clearance` is mean Euclidean cell-center distance
 to nearest blocked cell along the optimal route; it does **not** represent
 physical robot clearance.
 
+## Generator v3: replanning challenge and feasibility
+
+- The default Maze topology opens additional walls between carved corridors
+  to create cycles and alternate paths. `--maze-loops 0` disables this.
+- `--replanning-mode required` is an explicit, opt-in generator constraint:
+  the **initial** A* belief-map path must intersect at least one hidden
+  obstacle outside the initial sensor's visibility. The true map must remain
+  connected by cardinal moves even after all hidden blockers are placed.
+- `--oracle-step-reserve K` (nonnegative integer, K < max_steps) is another
+  opt-in constraint: the **true-map shortest number of actions** must be no
+  more than `max_steps - K`. It does not impose a guarantee on online policy
+  completion or safety.
+- The `max_route_steps` explicit upper bound remains supported and is
+  combined with the reserve bound by taking the smaller of the two. The
+  prior start-goal choice is filtered before hidden obstacles, and the
+  final true map is checked again.
+
+The `initial_plan_blocked` metric means **there exists an unknown hidden
+cell on a fully planned path in the initial belief map**. It does not
+mean a collision occurred, an A* reroute actually happened, or that the
+path length necessarily increased. The `initial_plan_hidden_hits` count
+is computed from the initial policy-safe observation plus privileged
+simulator truth **only in diagnostics**, not in planning.
+
+`oracle_feasible_within_budget` measures whether the true-map shortest
+path fits the configured max steps. `oracle_step_slack` is
+`max_steps - oracle_shortest_moves` and can be negative if the
+oracle reserve filter was not enabled. When `--oracle-diagnostic` is
+disabled, all four fields are null. Report the proportion of oracle-
+infeasible maps separately instead of attributing those timeouts to
+planner failure.
+
+**Strong research caveat:** Even though maze loops and hidden blockers
+make detours possible, the generator does not isolate replanning quality
+from navigation/observation policy. Cross-topology conclusions require
+held-out seeds and per-topology difficulty distributions. The v3
+structured seeds are not identical to v2; do not infer improvements
+from two benchmark results with different generated maps. Additionally,
+strict replanning or Oracle budget filtering may reject different candidate
+maps for sparse/standard/dense families, so **equal seeds do not guarantee
+identical prior geometry across densities**. Verify `prior_layout_sha256`
+before making nested-density comparisons.
+
 ## Separation and fairness
 
 Use a disjoint set of map seeds for BC train, BC validation and benchmark. PPO stores the seed of its training RNG; evaluation uses a far-removed, explicitly recorded seed sequence. This does **not** mathematically guarantee distinct generated layouts, especially for small grids; choose nontrivial map families and consider checksums of generated maps in a future protocol extension.
