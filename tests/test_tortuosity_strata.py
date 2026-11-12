@@ -59,7 +59,7 @@ def test_benchmark_subgroups_are_exhaustive_and_paired(tmp_path):
     for key, summary in report["summary"].items():
         groups = summary["tortuosity_groups"]
         assert sum(g["episodes"] for g in groups.values()) == 2, key
-        for band, group in groups.items():
+        for group in groups.values():
             if group["episodes"]:
                 assert group["success"]["n"] == group["episodes"]
                 assert group["spl"]["n"] == group["episodes"]
