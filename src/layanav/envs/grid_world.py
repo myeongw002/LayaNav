@@ -185,6 +185,12 @@ class GridWorldEnv(gym.Env[np.ndarray, int]):
         obs[5] = np.minimum(self._visits, 10) / 10.0
         return obs
 
+    def observe(self) -> np.ndarray:
+        """Return a fresh copy of the current policy-safe observation."""
+        if self._ended and self._steps == 0:
+            raise RuntimeError("Call reset() before observe()")
+        return self._observation()
+
     def _info(self, collision: bool, success: bool) -> dict[str, Any]:
         # No hidden truth or map-generation seed leaks through info.
         return {
