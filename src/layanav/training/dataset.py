@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from layanav.envs import GridConfig, GridWorldEnv
+from layanav.envs import GridConfig, GridWorldEnv, action_count
 from layanav.planners import OnlineAStarPolicy
 
 DATASET_SCHEMA_VERSION = 1
@@ -58,7 +58,7 @@ def collect_expert_dataset(
     for index in range(episodes):
         seed = seed_start + index
         observation, _ = env.reset(seed=seed)
-        expert = OnlineAStarPolicy()
+        expert = OnlineAStarPolicy(config.movement_mode)
         obs_in_episode: list[np.ndarray] = []
         actions_in_episode: list[int] = []
         done = False
@@ -89,6 +89,7 @@ def collect_expert_dataset(
         "actions": np.asarray(actions, dtype=np.uint8),
         "episode_seeds": np.asarray(episode_seeds, dtype=np.int64),
         "grid_size": np.asarray(config.size, dtype=np.int32),
+        "movement_mode": np.asarray(config.movement_mode, dtype=np.int32),
     }
     return dataset, {
         "attempted_episodes": episodes,
@@ -103,6 +104,16 @@ def save_dataset(path: str | Path, dataset: dict[str, np.ndarray]) -> None:
     np.savez_compressed(output, **dataset)
 
 
+def load_dataset_movement_mode(path: str | Path) -> int:
+    """Legacy .npz files implicitly contain 4-way demonstrations."""
+    with np.load(path, allow_pickle=False) as archive:
+        if int(archive["schema_version"]) != DATASET_SCHEMA_VERSION:
+            raise ValueError("Unsupported dataset schema")
+        mode = int(archive["movement_mode"]) if "movement_mode" in archive else 4
+    action_count(mode)
+    return mode
+
+
 def load_dataset(path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return decoded public observations, actions and episode seeds."""
     with np.load(path, allow_pickle=False) as archive:
@@ -111,10 +122,12 @@ def load_dataset(path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         observations = decode_observations(archive["observations"])
         actions = np.asarray(archive["actions"], dtype=np.int64)
         seeds = np.asarray(archive["episode_seeds"], dtype=np.int64)
+        mode = int(archive["movement_mode"]) if "movement_mode" in archive else 4
+    action_limit = action_count(mode)
     if actions.ndim != 1 or seeds.ndim != 1:
         raise ValueError("Actions and episode seeds must be 1D")
     if not len(actions) or len(actions) != len(observations) or len(actions) != len(seeds):
         raise ValueError("Dataset arrays have incompatible lengths")
-    if np.any((actions < 0) | (actions > 4)):
-        raise ValueError("Dataset has invalid action labels")
+    if np.any((actions < 0) | (actions >= action_limit)):
+        raise ValueError("Dataset has invalid action labels for movement_mode")
     return observations, actions, seeds
