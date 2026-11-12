@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from layanav.envs import ACTION_NAMES, GridConfig, GridWorldEnv, action_count
-from layanav.envs.grid_world import DELTAS
+from layanav.envs.grid_world import DELTAS, valid_transition
 from layanav.planners import ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 
 
@@ -85,7 +85,12 @@ def test_8way_astar_octile_heuristic_and_corner_rule():
     # No squeeze into the diagonal even when its destination is unoccupied.
     blocked[1, 2] = True
     blocked[2, 1] = True
-    assert OnlineAStarPolicy._find_path(blocked, (1, 1), (2, 2), 8) == []
+    detour = OnlineAStarPolicy._find_path(blocked, (1, 1), (2, 2), 8)
+    assert detour and detour[1] != (2, 2)
+    assert all(
+        valid_transition(blocked, x0, y0, x1 - x0, y1 - y0)
+        for (x0, y0), (x1, y1) in pairwise(detour)
+    )
 
 
 def test_apf_8way_scores_diagonal_candidates():
