@@ -61,6 +61,8 @@ REPORT_FIELDS = (
     "stay_steps", "max_consecutive_stay", "revisits",
     "goal_distance_remaining", "failure_trace", "map_sha256",
     "prior_layout_sha256", "spl",
+    "initial_plan_hidden_hits", "initial_plan_blocked",
+    "oracle_feasible_within_budget", "oracle_step_slack",
     "tortuosity_bin",
     *DIFFICULTY_METRICS,
 )
@@ -156,6 +158,9 @@ def run_episode(
     oracle_distance: float | None = None
     map_sha256: str | None = None
     prior_layout_sha256: str | None = None
+    initial_plan_hidden_hits: int | None = None
+    oracle_feasible_within_budget: bool | None = None
+    oracle_step_slack: int | None = None
     difficulty: dict[str, float | int | None] = {
         metric: None for metric in DIFFICULTY_METRICS
     }
@@ -167,6 +172,18 @@ def run_episode(
             blocked, truth["robot"], truth["goal"], env.config.movement_mode
         )
         oracle_moves = len(path) - 1 if path else None
+        if oracle_moves is not None:
+            oracle_step_slack = env.config.max_steps - oracle_moves
+            oracle_feasible_within_budget = oracle_step_slack >= 0
+        belief_blocked = (obs[0] > 0.5) | (obs[1] > 0.5)
+        initial_route = OnlineAStarPolicy._find_path(
+            belief_blocked, truth["robot"], truth["goal"],
+            env.config.movement_mode,
+        )
+        initial_plan_hidden_hits = sum(
+            bool(truth["hidden_obstacles"][y, x] and obs[2, y, x] > 0.5)
+            for x, y in initial_route
+        )
         map_sha256 = map_fingerprint(
             truth["static_map"], truth["hidden_obstacles"],
             truth["robot"], truth["goal"], env.config.movement_mode,
@@ -266,6 +283,13 @@ def run_episode(
         "spl": spl,
         "map_sha256": map_sha256,
         "prior_layout_sha256": prior_layout_sha256,
+        "initial_plan_hidden_hits": initial_plan_hidden_hits,
+        "initial_plan_blocked": (
+            initial_plan_hidden_hits > 0
+            if initial_plan_hidden_hits is not None else None
+        ),
+        "oracle_feasible_within_budget": oracle_feasible_within_budget,
+        "oracle_step_slack": oracle_step_slack,
         **difficulty,
         "tortuosity_bin": tortuosity_bin(difficulty["path_tortuosity"]),
         "termination_reason": "goal_reached" if success else "time_limit",
@@ -485,6 +509,8 @@ def benchmark(
                     "mean_inference_ms", "distance_traveled", "oracle_efficiency",
                     "stay_steps", "max_consecutive_stay", "revisits",
                     "goal_distance_remaining", "spl", *DIFFICULTY_METRICS,
+                    "initial_plan_hidden_hits", "initial_plan_blocked",
+                    "oracle_feasible_within_budget", "oracle_step_slack",
                 ):
                     series = np.asarray([
                         float(row[metric]) if row[metric] is not None else np.nan
@@ -621,6 +647,15 @@ def benchmark(
             },
             "tortuosity_bins_are_heuristic": True,
             "failure_reason_is_diagnostic": True,
+            "initial_plan_blocked_is_diagnostic": True,
+            "initial_plan_blocked_definition": (
+                "Initial belief-map A* route includes at least one hidden "
+                "obstacle unknown in the reset observation; this does not "
+                "guarantee collision or policy replanning."
+            ),
+            "oracle_feasible_definition": (
+                "true-map shortest action count <= episode max_steps"
+            ),
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
             "sensor": sensor,
