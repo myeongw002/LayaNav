@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 from layanav.envs import GridConfig, GridWorldEnv
 from layanav.planners import OnlineAStarPolicy
@@ -25,7 +26,7 @@ def test_u_shape_geometry_varies_across_seeds_and_preserves_detour():
             snap["static_map"], start, goal, 8,
         )
         assert path[0] == start and path[-1] == goal
-        distance = sum(math.dist(a, b) for a, b in zip(path[:-1], path[1:], strict=True))
+        distance = sum(math.dist(a, b) for a, b in pairwise(path))
         assert distance > math.dist(start, goal) + 2
     assert len(positions) >= 10
     assert len(direct_distances) >= 4
