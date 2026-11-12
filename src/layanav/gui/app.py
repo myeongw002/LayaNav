@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from layanav.envs import GridConfig, GridWorldEnv
 from layanav.envs.map_io import load_map, save_map
 from layanav.planners import OnlineAStarPolicy
+from layanav.recording import EpisodeRecorder, ReplaySession
 
 
 class MapCanvas(QWidget):
@@ -36,6 +37,8 @@ class MapCanvas(QWidget):
     ) -> None:
         super().__init__()
         self.env, self.truth, self.on_edit = env, truth, on_edit
+        self.trail: list[tuple[int, int]] = []
+        self.path: list[tuple[int, int]] = []
         self.setMinimumSize(330, 330)
 
     def _geometry(self) -> tuple[float, float, float]:
@@ -70,6 +73,25 @@ class MapCanvas(QWidget):
                     max(1, int(cell - 1)),
                     max(1, int(cell - 1)),
                     QColor(fill),
+                )
+        # Both panels show the robot trajectory; planned path is policy-derived.
+        if len(self.trail) > 1:
+            painter.setPen(QPen(QColor("#8654c7"), max(1, round(cell * 0.2))))
+            for (x0, y0), (x1, y1) in zip(self.trail[:-1], self.trail[1:], strict=True):
+                painter.drawLine(
+                    round(left + (x0 + 0.5) * cell),
+                    round(top + (y0 + 0.5) * cell),
+                    round(left + (x1 + 0.5) * cell),
+                    round(top + (y1 + 0.5) * cell),
+                )
+        if not self.truth and len(self.path) > 1:
+            painter.setPen(QPen(QColor("#f5ad38"), max(1, round(cell * 0.2))))
+            for (x0, y0), (x1, y1) in zip(self.path[:-1], self.path[1:], strict=True):
+                painter.drawLine(
+                    round(left + (x0 + 0.5) * cell),
+                    round(top + (y0 + 0.5) * cell),
+                    round(left + (x1 + 0.5) * cell),
+                    round(top + (y1 + 0.5) * cell),
                 )
         x, y = state["goal"]
         painter.setBrush(QColor("#20ac77"))
@@ -118,6 +140,9 @@ class MainWindow(QMainWindow):
         self.env = GridWorldEnv(GridConfig())
         self.env.reset(seed=42)
         self.policy = OnlineAStarPolicy()
+        self.recorder: EpisodeRecorder | None = None
+        self.replay: ReplaySession | None = None
+        self.trail: list[tuple[int, int]] = []
         self.total_reward = 0.0
         self.playing = False
         self.timer = QTimer(self)
@@ -130,7 +155,8 @@ class MainWindow(QMainWindow):
         root.addLayout(controls)
 
         self.mode = QComboBox()
-        self.mode.addItems(["Online A*", "Manual (arrow keys)"])
+        self.mode.addItems(["Online A*", "Manual (arrow keys)", "Replay"])
+        self.mode.currentIndexChanged.connect(self._mode_changed)
         controls.addWidget(QLabel("Policy:"))
         controls.addWidget(self.mode)
 
@@ -172,6 +198,22 @@ class MainWindow(QMainWindow):
         load_button.clicked.connect(self._load_map_dialog)
         controls.addWidget(load_button)
 
+        playback_controls = QHBoxLayout()
+        root.addLayout(playback_controls)
+        playback_controls.addWidget(QLabel("Speed (steps/s):"))
+        self.speed = QSpinBox()
+        self.speed.setRange(1, 30)
+        self.speed.setValue(10)
+        self.speed.valueChanged.connect(self._change_speed)
+        playback_controls.addWidget(self.speed)
+        save_episode_button = QPushButton("Save episode")
+        save_episode_button.clicked.connect(self._save_episode_dialog)
+        playback_controls.addWidget(save_episode_button)
+        load_episode_button = QPushButton("Load replay")
+        load_episode_button.clicked.connect(self._load_episode_dialog)
+        playback_controls.addWidget(load_episode_button)
+        playback_controls.addStretch(1)
+
         maps = QHBoxLayout()
         root.addLayout(maps, 1)
         for truth, title in ((True, "Ground Truth (debug / editing)"), (False, "Robot Belief (policy view)")):
@@ -195,6 +237,7 @@ class MainWindow(QMainWindow):
             QLabel("Edit by clicking Ground Truth. Use Play for A*, or switch to Manual "
                    "and use arrow keys. Editing resets the episode.")
         )
+        self._start_episode()
         self._update_view()
 
     def _stop(self) -> None:
