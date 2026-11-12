@@ -2,7 +2,7 @@
 
 ## Research question
 
-Can a learned navigation policy handle previously unknown, stationary obstacles with only a known prior map, limited-radius sensing and a persistent belief map? The comparison supports **Online A***, **CNN behavior cloning (BC)**, **CNN PPO**, and experimental **Laya-spatial BC**, under the same evaluation conditions.
+Can a learned navigation policy handle previously unknown, stationary obstacles with only a known prior map, limited-radius sensing and a persistent belief map? The comparison supports **Online A***, **Artificial Potential Field (APF)**, **CNN behavior cloning (BC)**, **CNN PPO**, and experimental **Laya-spatial BC**, under the same evaluation conditions.
 
 This benchmark does not establish that a language-pretrained Decision Model transfers to spatial navigation. Laya-spatial integration is available as an experimental adapter, but no real-pretrained-checkpoint performance has been measured.
 
@@ -15,6 +15,10 @@ This benchmark does not establish that a language-pretrained Decision Model tran
 - Episode-level random map generation is seeded by `eval_seed + episode_index`; every method uses the **same seed for each map family**.
 - Map families differ in hidden obstacle count and known wall segments; all use the same grid size and action space. Family densities scale with grid size.
 - `raycast` senses only cells with discrete Bresenham line-of-sight; `circle` is an ideal (no-occlusion) sensor.
+- APF is a local, strictly potential-descending controller on the belief map;
+  it may stop at a local minimum even when the environment is traversable.
+  APF parameters are saved in `summary.json` and must be tuned using
+  seeds disjoint from the final evaluation set.
 
 ## Separation and fairness
 
