@@ -229,7 +229,7 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 self._save_map(path)
-            except (OSError, ValueError) as exc:
+            except (OSError, TypeError, ValueError) as exc:
                 QMessageBox.warning(self, "Map save failed", str(exc))
 
     def _load_map(self, path: str) -> None:
@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 self._load_map(path)
-            except (OSError, ValueError) as exc:
+            except (OSError, TypeError, ValueError) as exc:
                 QMessageBox.warning(self, "Map load failed", str(exc))
 
     def _reset_same_map(self) -> None:
