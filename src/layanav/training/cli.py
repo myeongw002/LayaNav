@@ -13,6 +13,7 @@ def _environment(args: argparse.Namespace) -> GridConfig:
         size=args.grid_size,
         observation_radius=args.radius,
         sensor_mode=args.sensor,
+        movement_mode=args.movement_mode,
         hidden_obstacle_count=args.hidden_obstacles,
         max_steps=args.max_steps,
         known_wall_segments=args.wall_segments,
@@ -21,6 +22,7 @@ def _environment(args: argparse.Namespace) -> GridConfig:
 
 def _environment_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--grid-size", type=int, default=32)
+    parser.add_argument("--movement-mode", type=int, choices=[4, 8], default=4)
     parser.add_argument("--radius", type=int, default=5)
     parser.add_argument("--sensor", choices=["circle", "raycast"], default="raycast")
     parser.add_argument("--hidden-obstacles", type=int, default=24)
