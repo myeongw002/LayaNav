@@ -8,11 +8,11 @@ An experimental platform for **partially observable grid navigation** with onlin
 - Prior static map, simulator-private unknown obstacles, and robot belief map
 - Selectable ideal circular or occlusion-aware Bresenham raycast sensor (radius 5 by default)
 - Five discrete actions: up, down, left, right, stay
-- Online A* that replans on the **belief map**, not privileged ground truth
+- Online A* and discrete Artificial Potential Field (APF) using the **belief map**, not privileged ground truth
 - PySide6 desktop map editor with sensor selection, JSON map import/export, planned A* path, visited trail and adjustable playback speed
 - Deterministic episode recording and replay with observation/reward consistency checks
 - PPO baseline with a custom spatial CNN extractor and checkpoint metadata
-- Paired-seed evaluation of A*, BC, PPO and experimental spatial Laya across controlled map families with 95% bootstrap confidence intervals
+- Paired-seed evaluation of A*, APF, BC, PPO and experimental spatial Laya across controlled map families with 95% bootstrap confidence intervals
 - Tests for reproducibility, limited sensing, mapping, collision behavior, and replanning
 
 **The GUI's ground-truth panel is privileged debug visualization; policies must never receive it.**
@@ -59,9 +59,32 @@ The `circle` sensor sees every cell inside its radius, regardless of walls. The 
 
 ## Episode recording and replay
 
-In LayaNav Studio, select **Online A*** and click **Play/Step** to navigate. The yellow line is the latest A* belief-map path, and the purple trail shows visited positions. **Save episode** writes a replayable JSON trace containing actions, rewards, observation SHA-256 digests, sensor settings and the initial map layout. **Load replay** reconstructs the environment and lets you replay/verify steps; its action sequence cannot be modified during replay. Speed is adjustable in steps per second.
+In LayaNav Studio, select **Online A*** or **APF** and click **Play/Step** to navigate. The yellow line is the latest A* belief-map path, and the purple trail shows visited positions. **Save episode** writes a replayable JSON trace containing actions, rewards, observation SHA-256 digests, sensor settings and the initial map layout. **Load replay** reconstructs the environment and lets you replay/verify steps; its action sequence cannot be modified during replay. Speed is adjustable in steps per second.
 
 **Security and research isolation:** Episode JSON stores the simulator's *complete obstacle truth* for deterministic replays. It is privileged debug data, not a policy observation or training input. The 6-channel policy observation remains separate. The trace records hashes rather than embedding every full observation; the same observations are regenerated and verified at replay time.
+
+## Classical APF Baseline
+
+APF is a deterministic **local reactive controller** with goal attraction and
+repulsion from the nearest *known* obstacle. It selects only potential-decreasing
+four-connected moves. If every valid neighbor has equal or higher potential,
+it outputs STAY at a local minimum, **even when A* could find a detour**.
+No global A* recovery is used, to keep the baseline distinct.
+
+```bash
+# Both policies use the same generated maps for each seed:
+python -m layanav.evaluation.cli \
+  --methods astar apf --families sparse standard dense \
+  --episodes 100 --eval-seed 200000 --sensor raycast \
+  --output-dir results/astar_vs_apf
+
+# GUI: select APF from the policy dropdown.
+python -m layanav --gui
+```
+
+No PyTorch is needed for APF. The optional unknown-cell penalty is
+heuristic and defaults to zero. The benchmark records APF parameters.
+See [docs/APF.md](docs/APF.md) for equations and limitations.
 
 ## CNN + Behavior Cloning baseline (v0.3)
 
