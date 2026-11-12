@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import heapq
+import math
 
 import numpy as np
 
-from layanav.envs.grid_world import DELTAS
+from layanav.envs.grid_world import (
+    DELTAS,
+    STAY_ACTION,
+    action_count,
+    movement_actions,
+    step_distance,
+    valid_transition,
+)
 
 
 class OnlineAStarPolicy:
-    def __init__(self) -> None:
+    def __init__(self, movement_mode: int = 4) -> None:
+        action_count(movement_mode)
+        self.movement_mode = movement_mode
         self.last_path: list[tuple[int, int]] = []
 
     @staticmethod
@@ -27,9 +37,9 @@ class OnlineAStarPolicy:
         blocked = prior | discovered
         start = self._position(observation[3])
         goal = self._position(observation[4])
-        self.last_path = self._find_path(blocked, start, goal)
+        self.last_path = self._find_path(blocked, start, goal, self.movement_mode)
         if len(self.last_path) < 2:
-            return 4  # stay if at goal or known path does not exist
+            return STAY_ACTION  # goal or no known path
         nx, ny = self.last_path[1]
         x, y = start
         delta = (nx - x, ny - y)
@@ -37,8 +47,10 @@ class OnlineAStarPolicy:
 
     @staticmethod
     def _find_path(
-        blocked: np.ndarray, start: tuple[int, int], goal: tuple[int, int]
+        blocked: np.ndarray, start: tuple[int, int], goal: tuple[int, int],
+        movement_mode: int = 4,
     ) -> list[tuple[int, int]]:
+        action_count(movement_mode)
         h, w = blocked.shape
         if blocked[start[1], start[0]] or blocked[goal[1], goal[0]]:
             return []
@@ -56,17 +68,25 @@ class OnlineAStarPolicy:
                     path.append(node)
                 return list(reversed(path))
             x, y = node
-            for dx, dy in DELTAS[:4]:
+            for action in movement_actions(movement_mode):
+                dx, dy = DELTAS[action]
+                if not valid_transition(blocked, x, y, dx, dy):
+                    continue
                 nx, ny = x + dx, y + dy
                 other = (nx, ny)
-                if not (0 <= nx < w and 0 <= ny < h) or blocked[ny, nx]:
-                    continue
-                cost = costs[node] + 1
+                cost = costs[node] + step_distance(dx, dy)
                 if cost >= costs.get(other, 10**9):
                     continue
                 costs[other] = cost
                 parents[other] = node
-                heuristic = abs(nx - goal[0]) + abs(ny - goal[1])
+                difference_x = abs(nx - goal[0])
+                difference_y = abs(ny - goal[1])
+                heuristic = (
+                    difference_x + difference_y
+                    if movement_mode == 4
+                    else max(difference_x, difference_y)
+                    + (math.sqrt(2.0) - 1.0) * min(difference_x, difference_y)
+                )
                 order += 1
                 heapq.heappush(frontier, (cost + heuristic, order, other))
         return []
