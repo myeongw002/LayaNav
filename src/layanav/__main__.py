@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from layanav.envs import GridWorldEnv
+from layanav.envs import GridConfig, GridWorldEnv
 from layanav.planners import ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 
 
@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--policy", choices=["astar", "apf"], default="astar")
+    parser.add_argument("--movement-mode", type=int, choices=[4, 8], default=4)
     args = parser.parse_args()
     if args.gui:
         try:
@@ -24,11 +25,11 @@ def main() -> None:
         return
     if args.episodes < 1:
         parser.error("--episodes must be positive")
-    env = GridWorldEnv()
+    env = GridWorldEnv(GridConfig(movement_mode=args.movement_mode))
     successes = 0
     for i in range(args.episodes):
         obs, _ = env.reset(seed=args.seed + i)
-        policy = OnlineAStarPolicy() if args.policy == "astar" else ArtificialPotentialFieldPolicy()
+        policy = OnlineAStarPolicy(args.movement_mode) if args.policy == "astar" else ArtificialPotentialFieldPolicy(movement_mode=args.movement_mode)
         finished = False
         last_info = None
         while not finished:
