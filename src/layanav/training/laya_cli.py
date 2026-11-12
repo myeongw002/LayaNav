@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 
+import torch
+
 from layanav.models.laya_spatial import (
     SpatialAdapterConfig,
     SpatialLayaPolicy,
@@ -39,6 +41,8 @@ def main() -> None:
     backbone, source = load_laya_backbone(
         model_id=args.model_id, device=args.device, revision=args.revision,
     )
+    # Seed the trainable spatial/decision heads *before* their initialization.
+    torch.manual_seed(args.seed)
     model = SpatialLayaPolicy(
         backbone,
         SpatialAdapterConfig(
