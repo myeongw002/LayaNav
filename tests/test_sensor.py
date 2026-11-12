@@ -65,7 +65,7 @@ def test_sensor_validation():
 
 
 def test_same_random_truth_across_sensor_modes():
-    kwargs = dict(size=16, observation_radius=3, hidden_obstacle_count=10)
+    kwargs = {"size": 16, "observation_radius": 3, "hidden_obstacle_count": 10}
     circle = GridWorldEnv(GridConfig(**kwargs, sensor_mode="circle"))
     ray = GridWorldEnv(GridConfig(**kwargs, sensor_mode="raycast"))
     circle.reset(seed=123)
