@@ -21,6 +21,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv, action_count
+from layanav.envs.map_generation import MAP_GENERATOR_VERSION
 from layanav.evaluation.difficulty import (
     DIFFICULTY_METRICS,
     map_fingerprint,
@@ -74,6 +75,8 @@ def make_family_config(
     max_steps: int,
     movement_mode: int = 4,
     topology: str = "random",
+    min_route_steps: int | None = None,
+    max_route_steps: int | None = None,
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -90,6 +93,8 @@ def make_family_config(
         max_steps=max_steps,
         movement_mode=movement_mode,
         topology=topology,
+        min_route_steps=min_route_steps,
+        max_route_steps=max_route_steps,
     )
 
 
@@ -354,6 +359,8 @@ def benchmark(
     bootstrap_replicates: int = 2000,
     save_failures: bool = True,
     topologies: tuple[str, ...] = ("random",),
+    min_route_steps: int | None = None,
+    max_route_steps: int | None = None,
 ) -> dict[str, Any]:
     """Generate per-episode CSV plus JSON summary over paired held-out map seeds."""
     if episodes < 1 or eval_seed < 0:
@@ -382,6 +389,8 @@ def benchmark(
             family, size=size, radius=radius, sensor=sensor,
             max_steps=max_steps, movement_mode=movement_mode,
             topology=topology,
+            min_route_steps=min_route_steps,
+            max_route_steps=max_route_steps,
         )
         for topology in topologies
         for family in families
@@ -517,6 +526,8 @@ def benchmark(
             "paired_map_seeds": True,
             "save_failure_traces": save_failures,
             "topologies": list(topologies),
+            "structured_map_generator_version": MAP_GENERATOR_VERSION,
+            "route_bounds_are_graph_steps": True,
             "failure_reason_is_diagnostic": True,
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,

@@ -29,6 +29,8 @@ def main() -> None:
     parser.add_argument("--hidden-obstacles", type=int, default=24)
     parser.add_argument("--wall-segments", type=int, default=5)
     parser.add_argument("--max-steps", type=int, default=256)
+    parser.add_argument("--min-route-steps", type=int)
+    parser.add_argument("--max-route-steps", type=int)
     args = parser.parse_args()
 
     from layanav.training.ppo import PPOSettings, train_ppo
@@ -39,6 +41,8 @@ def main() -> None:
         sensor_mode=args.sensor,
         movement_mode=args.movement_mode,
         topology=args.topology,
+        min_route_steps=args.min_route_steps,
+        max_route_steps=args.max_route_steps,
         hidden_obstacle_count=args.hidden_obstacles,
         known_wall_segments=args.wall_segments,
         max_steps=args.max_steps,
