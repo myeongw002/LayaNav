@@ -34,6 +34,7 @@
 - [x] U-Shape randomized start/goal depth and barrier separation
 - [x] Structured Map Generator v2 with connected nested hidden obstacles and route-step bounds
 - [x] Tortuosity-stratified success/SPL evaluation, mean path clearance and CI
+- [x] Generator v3 looped Maze and opt-in initial-route obstruction with feasible Oracle budget
 
 ## Milestone v0.3 — classical and neural baselines
 

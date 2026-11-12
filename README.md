@@ -277,6 +277,55 @@ Per-group sample counts must be checked before drawing conclusions.
 The structured **seed-to-map layouts change** relative to generator v1.
 Existing replay JSON remains valid because it embeds the map truth.
 
+## Map Generator v3 — looped Maze and initial-plan obstruction
+
+Structured Maze maps now introduce additional loop openings in the prior
+walls (default `max(2, grid_size // 2)` candidates; override with
+`--maze-loops 0` to restore tree-shaped Maze topology). This makes it
+possible to intentionally block the initial route while a detour exists.
+
+For a controlled partial-observability experiment, use
+`--replanning-mode required` on **structured** topologies. Generation
+places at least one hidden obstacle on the **initial belief-map A* route**
+that is *not visible* to the starting sensor. It checks that removal does
+not disconnect the original 4-way traversable component, places any extra
+hidden obstacles with the connectivity-preserving algorithm, and verifies
+the initial path is still blocked by an unknown obstacle. On impossible
+settings it errors; it never silently drops the requested challenge.
+
+This provides an **initial-route obstruction** proxy, not an ironclad
+guarantee of a policy actually issuing a replanning step. The policy may
+sense the blocker before reaching it and alter its plan naturally.
+
+Optional `--oracle-step-reserve N` rejects generated structured maps
+whose **ground-truth shortest action count** exceeds
+`max_steps - N`. This rejects objectively impossible time limits but does
+*not* guarantee online-policy success: sensing and exploration cost extra
+steps. This filter is opt-in to preserve earlier benchmarks and small-step
+test scenarios. For Random, the default generator remains unchanged.
+
+```bash
+python -m layanav.evaluation.cli \
+  --methods astar apf --topologies maze corridor \
+  --families sparse standard dense --movement-mode 8 \
+  --grid-size 32 --radius 5 --sensor raycast \
+  --maze-loops 16 --replanning-mode required \
+  --oracle-step-reserve 32 --max-steps 256 \
+  --episodes 20 --eval-seed 500000 --oracle-diagnostic \
+  --output-dir results/replanning_v3
+```
+
+`episodes.csv` and `summary.json` now report the count of initially
+unknown hidden obstacles on the initial A* route
+(`initial_plan_hidden_hits`), Boolean `initial_plan_blocked`,
+`oracle_feasible_within_budget`, and `oracle_step_slack`.
+These are **reporting-only privileged diagnostics**; without
+`--oracle-diagnostic` they are null. Neither A* nor APF receives them.
+
+**Reproducibility:** Structured seed-to-map layouts change in v3, while
+the legacy Random generator remains unchanged. Store the generator
+version, full configs, code commit, and maps for long-term comparison.
+
 ## CNN + Behavior Cloning baseline (v0.3)
 
 The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).
