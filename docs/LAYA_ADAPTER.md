@@ -96,6 +96,18 @@ state-dict roundtrip, BC training and benchmark integration. It does not
 download 808 MB pretrained weights, and cannot certify compatibility of
 your exact Laya/Transformers/CUDA versions.
 
+An explicit command runs one actual pretrained-weight forward/backward pass:
+
+```bash
+python -m layanav.training.laya_smoke \
+  --model-id convaiinnovations/laya \
+  --device cuda --batch-size 1 --token-grid 8 --grid-size 32
+```
+
+It reports resolved model revision, logits/value shape, the adapter gradient,
+forward/backward latency and peak allocated/reserved CUDA memory.
+It does **not** claim goal-reaching ability, a valid RL critic or calibrated decisions.
+
 The next required validation is a real pretrained Laya forward/backward
 run on Ubuntu 24.04 / RTX 5070 (12GB), measuring peak GPU memory and
 batch-size limits. If too large, lower `--batch-size` to 1, reduce
