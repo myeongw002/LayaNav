@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="results/benchmark")
     parser.add_argument("--episodes", type=int, default=50)
     parser.add_argument("--eval-seed", type=int, default=200_000)
+    parser.add_argument("--movement-mode", type=int, choices=[4, 8], default=4)
     parser.add_argument("--grid-size", type=int, default=32)
     parser.add_argument("--radius", type=int, default=5)
     parser.add_argument("--sensor", choices=["circle", "raycast"], default="raycast")
@@ -43,6 +44,7 @@ def main() -> None:
             radius=args.radius,
             sensor=args.sensor,
             max_steps=args.max_steps,
+            movement_mode=args.movement_mode,
             output_dir=args.output_dir,
             bc_checkpoint=args.bc_checkpoint,
             ppo_checkpoint=args.ppo_checkpoint,
