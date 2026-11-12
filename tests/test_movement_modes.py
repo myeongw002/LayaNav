@@ -1,6 +1,7 @@
 """Cardinal/diagonal action contracts, corner safety and weighted planning."""
 
 import math
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -79,7 +80,7 @@ def test_8way_astar_octile_heuristic_and_corner_rule():
     assert len(path8) == 5
     assert all(
         (x1 - x0, y1 - y0) == (1, 1)
-        for (x0, y0), (x1, y1) in zip(path8[:-1], path8[1:], strict=True)
+        for (x0, y0), (x1, y1) in pairwise(path8)
     )
     # No squeeze into the diagonal even when its destination is unoccupied.
     blocked[1, 2] = True
