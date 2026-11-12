@@ -51,7 +51,6 @@ class OnlineAStarPolicy:
         movement_mode: int = 4,
     ) -> list[tuple[int, int]]:
         action_count(movement_mode)
-        h, w = blocked.shape
         if blocked[start[1], start[0]] or blocked[goal[1], goal[0]]:
             return []
         frontier: list[tuple[int, int, tuple[int, int]]] = []
