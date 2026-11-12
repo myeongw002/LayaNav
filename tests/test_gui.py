@@ -79,6 +79,19 @@ def test_gui_start_edit_step_and_reset(tmp_path):
     window._reset_same_map()
     assert window.mode.currentIndex() == 0
     assert window.replay is None
+
+    # APF must be selectable without a model checkpoint or privileged map.
+    apf_index = window.mode.findText("APF")
+    assert apf_index >= 0
+    window.mode.setCurrentIndex(apf_index)
+    window._tick()
+    assert window.env.debug_snapshot()["step"] == 1
+    assert window.belief_canvas.path == []
+    assert window.recorder is not None
+    assert len(window.recorder.steps) == 1
+
+    window._reset_same_map()
+    window.mode.setCurrentIndex(0)
     window.close()
     window.deleteLater()
     app.processEvents()
