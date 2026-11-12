@@ -609,11 +609,15 @@ class MainWindow(QMainWindow):
             "local_minimum", "blocked"
         ):
             suffix += " | APF stalled (local minimum / blocked)"
-        if self.mode.currentIndex() == 2 and self.replay is not None:
-            if self.replay.finished and self.replay.diagnostics:
-                reason = self.replay.diagnostics.get("failure_reason")
-                if reason:
-                    suffix += f" | Recorded failure: {reason}"
+        if (
+            self.mode.currentIndex() == 2
+            and self.replay is not None
+            and self.replay.finished
+            and self.replay.diagnostics
+        ):
+            reason = self.replay.diagnostics.get("failure_reason")
+            if reason:
+                suffix += f" | Recorded failure: {reason}"
         self.status_label.setText(
             f"Step {snap['step']}/{self.env.config.max_steps} | "
             f"position {snap['robot']} | goal {snap['goal']} | "
