@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--apf-influence-radius", type=float, default=3.0)
     parser.add_argument("--apf-unknown-penalty", type=float, default=0.0)
     parser.add_argument("--oracle-diagnostic", action="store_true")
+    parser.add_argument("--no-save-failures", action="store_true")
     parser.add_argument("--bootstrap-replicates", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=2026)
     args = parser.parse_args()
@@ -57,6 +58,7 @@ def main() -> None:
             ),
             device=args.device,
             oracle_diagnostic=args.oracle_diagnostic,
+            save_failures=not args.no_save_failures,
             bootstrap_seed=args.bootstrap_seed,
             bootstrap_replicates=args.bootstrap_replicates,
         )
