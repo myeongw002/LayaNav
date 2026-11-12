@@ -9,7 +9,6 @@ unnecessary float32 dataset size. No simulator-private maps are persisted.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
