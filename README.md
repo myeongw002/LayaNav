@@ -119,7 +119,7 @@ In LayaNav Studio, select **Online A*** or **APF** and click **Play/Step** to na
 
 APF is a deterministic **local reactive controller** with goal attraction and
 repulsion from the nearest *known* obstacle. It selects only potential-decreasing
-four-connected moves. If every valid neighbor has equal or higher potential,
+4-way or 8-way neighboring moves. If every valid neighbor has equal or higher potential,
 it outputs STAY at a local minimum, **even when A* could find a detour**.
 No global A* recovery is used, to keep the baseline distinct.
 

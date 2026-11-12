@@ -64,7 +64,7 @@ Future fairer comparisons should constrain wall time, compute, parameter counts,
 
 ## Reported metrics
 
-Per episode (`episodes.csv`): family, method, seed, success, steps, actual moved steps, attempted collisions, accumulated return, mean policy inference latency in milliseconds. When enabled, add the oracle shortest number of moves and a success-only path efficiency ratio (oracle moves / actual moved moves).
+Per episode (`episodes.csv`): family, method, seed, success, steps, actual moved steps, attempted collisions, accumulated return, mean policy inference latency in milliseconds. When enabled, add the oracle shortest move count, oracle shortest geometric distance and success-only geometric path efficiency (oracle distance / actual distance).
 
 In `summary.json`: mean and 95% percentile-bootstrap interval for each metric over episode/map seeds, sample count, environment config, seed range, checkpoint paths+SHA-256, and PPO model training metadata. Bootstrap samples **episodes**, never consecutive timesteps. Confidence intervals for path efficiency include only successful episodes and are null when there are none.
 
