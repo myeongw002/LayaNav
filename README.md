@@ -2,7 +2,7 @@
 
 An experimental platform for **partially observable grid navigation** with online map updates, unknown static obstacles, interactive simulation, and future decision-model policies.
 
-## Current milestone: v0.3 (CNN/BC + PPO + benchmark)
+## Current milestone: v0.4 experimental Laya spatial adapter
 
 - Gymnasium-compatible deterministic GridWorld; 32×32 by default
 - Prior static map, simulator-private unknown obstacles, and robot belief map
@@ -12,7 +12,7 @@ An experimental platform for **partially observable grid navigation** with onlin
 - PySide6 desktop map editor with sensor selection, JSON map import/export, planned A* path, visited trail and adjustable playback speed
 - Deterministic episode recording and replay with observation/reward consistency checks
 - PPO baseline with a custom spatial CNN extractor and checkpoint metadata
-- Paired-seed evaluation of A*, BC and PPO across controlled map families with 95% bootstrap confidence intervals
+- Paired-seed evaluation of A*, BC, PPO and experimental spatial Laya across controlled map families with 95% bootstrap confidence intervals
 - Tests for reproducibility, limited sensing, mapping, collision behavior, and replanning
 
 **The GUI's ground-truth panel is privileged debug visualization; policies must never receive it.**
@@ -122,9 +122,46 @@ Outputs: `episodes.csv` (per-map results) and `summary.json` (paired seed range,
 
 See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the evaluation protocol and research limitations.
 
+## Experimental Laya spatial adapter (v0.4)
+
+The original Laya model uses a pretrained ModernBERT text encoder plus a text-specific decision head. This branch reuses **only the pretrained encoder** and adds a six-channel spatial tokenizer, trainable positions, an actor head and a critic head. It is not the standard `laya.Agent.predict()` API.
+
+For the RTX 5070, install a Blackwell-compatible CUDA PyTorch wheel first, then `python -m pip install -e ".[train,laya]"` (Laya pinned to 0.4.31). Train against the previously collected belief-only A* demonstrations:
+
+```bash
+python -m layanav.training.laya_cli \
+  --train datasets/teacher_train.npz \
+  --validation datasets/teacher_val.npz \
+  --output checkpoints/laya_spatial_bc.pt \
+  --model-id convaiinnovations/laya \
+  --device cuda --batch-size 2 --accumulation-steps 4
+
+python -m layanav.evaluation.cli \
+  --methods astar bc ppo laya \
+  --bc-checkpoint checkpoints/cnn_bc.pt \
+  --ppo-checkpoint checkpoints/ppo_standard.zip \
+  --laya-checkpoint checkpoints/laya_spatial_bc.pt \
+  --families sparse standard dense --eval-seed 200000 \
+  --episodes 100 --device cuda --output-dir results/laya_comparison
+```
+
+For reproducible pretrained weights, pass an **exact model Hub commit** with `--revision`; a default floating revision is not recommended for research. Only the small adapter/head state is saved; the pretrained backbone is loaded again on evaluation. The value head is **not** trained by Behavior Cloning.
+
+Run a **single real pretrained-weight GPU smoke check** on your Ubuntu machine before attempting training:
+
+```bash
+python -m layanav.training.laya_smoke \
+  --model-id convaiinnovations/laya --device cuda \
+  --batch-size 1 --token-grid 8 --grid-size 32
+```
+
+This reports the resolved checkpoint revision, forward/backward latency, actor/critic shapes, nonzero adapter gradient, and peak CUDA allocation/reservation. It **does not** measure navigation performance.
+
+**Validation limits:** unit tests use a tiny fake backbone. The 421M-parameter pretrained Laya checkpoint has **not** been executed on the target RTX 5070 here. There are no trained navigation results yet. See [docs/LAYA_ADAPTER.md](docs/LAYA_ADAPTER.md) for implementation details and rigorous baseline requirements.
+
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya spatial adapter, fine-tuning, and controlled transfer ablations** remain unimplemented. v0.3 PPO/benchmark support is an experimental foundation, not evidence that PPO or Laya performs well.
+See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya spatial adapter and frozen-encoder BC training path** are implemented but not validated on the real pretrained checkpoint; full fine-tuning, PPO adaptation, and controlled transfer ablations remain unimplemented. v0.3 PPO/benchmark support is an experimental foundation, not evidence that PPO or Laya performs well.
 
 ## License
 

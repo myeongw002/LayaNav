@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--families", nargs="+", default=list(FAMILIES))
     parser.add_argument("--bc-checkpoint")
     parser.add_argument("--ppo-checkpoint")
+    parser.add_argument("--laya-checkpoint")
     parser.add_argument("--output-dir", default="results/benchmark")
     parser.add_argument("--episodes", type=int, default=50)
     parser.add_argument("--eval-seed", type=int, default=200_000)
@@ -40,6 +41,7 @@ def main() -> None:
             output_dir=args.output_dir,
             bc_checkpoint=args.bc_checkpoint,
             ppo_checkpoint=args.ppo_checkpoint,
+            laya_checkpoint=args.laya_checkpoint,
             device=args.device,
             oracle_diagnostic=args.oracle_diagnostic,
             bootstrap_seed=args.bootstrap_seed,

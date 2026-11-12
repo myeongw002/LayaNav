@@ -2,9 +2,9 @@
 
 ## Research question
 
-Can a learned navigation policy handle previously unknown, stationary obstacles with only a known prior map, limited-radius sensing and a persistent belief map? The comparison tests **Online A***, **CNN behavior cloning (BC)** and **CNN PPO** under the same evaluation conditions.
+Can a learned navigation policy handle previously unknown, stationary obstacles with only a known prior map, limited-radius sensing and a persistent belief map? The comparison supports **Online A***, **CNN behavior cloning (BC)**, **CNN PPO**, and experimental **Laya-spatial BC**, under the same evaluation conditions.
 
-This benchmark does not establish that a language-pretrained Decision Model transfers to spatial navigation. Laya integration is a later, separate experiment.
+This benchmark does not establish that a language-pretrained Decision Model transfers to spatial navigation. Laya-spatial integration is available as an experimental adapter, but no real-pretrained-checkpoint performance has been measured.
 
 ## Experimental environment
 
@@ -62,5 +62,5 @@ Run `python -m layanav.evaluation.cli --methods astar ...` without PyTorch. Add 
 
 - The current task has no moving obstacles, odometry drift, probabilistic occupancy, exploration bonus or formal safety guarantee.
 - Sparse terminal rewards can prevent PPO from learning useful behavior, even when code and unit tests work.
-- The feed-forward CNN cannot represent arbitrary action history beyond belief map and visit count; compare recurrent PPO or a planning-memory module in follow-up work.
+- The feed-forward CNN and current spatial Laya adapter cannot represent arbitrary action history beyond belief map and visit count; compare recurrent PPO or a planning-memory module in follow-up work.
 - CI only verifies small CPU episodes, gradient flow, saving/loading and contract invariants. It does **not** provide empirical navigation performance on the user GPU.
