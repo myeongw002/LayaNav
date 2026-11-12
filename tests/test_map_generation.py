@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -67,7 +68,7 @@ def test_u_shape_requires_detour():
     )
     assert route
     straight = math.dist(state["robot"], state["goal"])
-    actual = sum(math.dist(a, b) for a, b in zip(route[:-1], route[1:], strict=True))
+    actual = sum(math.dist(a, b) for a, b in pairwise(route))
     assert actual > 3 * straight
 
 
