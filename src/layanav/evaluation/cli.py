@@ -1,4 +1,4 @@
-"""Run A*, CNN-BC and PPO on identical held-out maps and write a report."""
+"""Run A*, APF, CNN-BC and PPO on identical held-out maps."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import json
 
 from layanav.evaluation.benchmark import FAMILIES, benchmark
+from layanav.planners import APFConfig
 
 
 def main() -> None:
@@ -23,6 +24,10 @@ def main() -> None:
     parser.add_argument("--sensor", choices=["circle", "raycast"], default="raycast")
     parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--apf-attractive-gain", type=float, default=1.0)
+    parser.add_argument("--apf-repulsive-gain", type=float, default=8.0)
+    parser.add_argument("--apf-influence-radius", type=float, default=3.0)
+    parser.add_argument("--apf-unknown-penalty", type=float, default=0.0)
     parser.add_argument("--oracle-diagnostic", action="store_true")
     parser.add_argument("--bootstrap-replicates", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=2026)
@@ -42,6 +47,12 @@ def main() -> None:
             bc_checkpoint=args.bc_checkpoint,
             ppo_checkpoint=args.ppo_checkpoint,
             laya_checkpoint=args.laya_checkpoint,
+            apf_config=APFConfig(
+                attractive_gain=args.apf_attractive_gain,
+                repulsive_gain=args.apf_repulsive_gain,
+                influence_radius=args.apf_influence_radius,
+                unknown_penalty=args.apf_unknown_penalty,
+            ),
             device=args.device,
             oracle_diagnostic=args.oracle_diagnostic,
             bootstrap_seed=args.bootstrap_seed,
