@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer
