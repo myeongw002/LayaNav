@@ -184,6 +184,45 @@ or privacy-limited environments. Existing default Random benchmarks retain
 the original summary keys (for example `dense/apf`); other topologies use
 `maze/dense/apf` etc.
 
+## Benchmark v2 — complexity, SPL and confidence intervals
+
+Benchmark summary schema v2 retains the previous result keys while adding:
+
+- **Wilson 95% score CI** for success rate (does not incorrectly report a
+  point interval of `[1, 1]` after 20/20 successes).
+- **SPL** over *all* episodes, including zero for failures:
+  `mean(success * oracle_distance / max(actual_distance, oracle_distance))`.
+- **Success-only steps/moves/geometric distance** with explicit sample
+  counts; failed rollouts never appear artificially short.
+- **Map fingerprints (SHA-256)** to verify identical layouts for paired
+  algorithms and descriptive complexity metrics: total/interior obstacle
+  density, initial unknown fraction, straight-line distance, shortest-path
+  tortuosity, shortest-path minimum obstacle-center clearance, degree-one
+  dead ends, and reachable free cells.
+
+**Important:** SPL and map complexity require `--oracle-diagnostic`. They
+are computed from *privileged simulator truth for reporting only* and
+are null when that option is disabled; the six-channel policy observation
+and reward are unchanged. Dead ends use the configured 4/8-way graph;
+clearance measures cell-center distances, **not** robot footprint.
+Path tortuosity measures the fully known optimal route, not the agent's
+actual trajectory.
+
+```bash
+python -m layanav.evaluation.cli \
+  --methods astar apf --movement-mode 8 \
+  --topologies random maze corridor rooms u_shape cluttered \
+  --families sparse standard dense \
+  --episodes 100 --eval-seed 300000 --sensor raycast \
+  --oracle-diagnostic --max-steps 256 \
+  --output-dir results/benchmark_v2
+```
+
+U-Shape now samples start/goal positions on opposite sides of its closed
+barrier, with multiple distances and detours; older U-Shape seed-to-map
+pairs change. Stored replay files remain valid because they embed exact
+maps. The historical **Random** generator is unchanged.
+
 ## CNN + Behavior Cloning baseline (v0.3)
 
 The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).

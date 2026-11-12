@@ -30,6 +30,8 @@
 - [x] Failure cause diagnostics, STAY/revisit metrics and replayable failed episodes
 - [ ] Replay seek/scrub controls
 - [x] Paired-seed bootstrap benchmark across controlled map families and held-out seeds
+- [x] Benchmark v2 SPL, Wilson success intervals, success-only distances, and privileged map difficulty descriptors
+- [x] U-Shape randomized start/goal depth and barrier separation
 
 ## Milestone v0.3 — classical and neural baselines
 
@@ -63,7 +65,7 @@
 
 ## Deferred work
 
-No Cached A*, D* Lite, LPA*, RRT* or hybrid APF-A* are planned for the current evaluation milestone. Benchmark v2 statistics (for example Wilson success intervals and SPL), additional map metrics and full Laya experiments remain separate work.
+No Cached A*, D* Lite, LPA*, RRT* or hybrid APF-A* are planned for the current evaluation milestone. Additional map-difficulty calibration, cross-topology generalization studies and full Laya experiments remain separate work.
 
 ## Non-goals for v0.1
 
