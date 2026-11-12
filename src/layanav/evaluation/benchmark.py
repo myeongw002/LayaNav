@@ -327,7 +327,7 @@ def benchmark(
             "confidence_interval": "95% percentile bootstrap across map seeds",
             "bootstrap_replicates": bootstrap_replicates,
             "bootstrap_seed": bootstrap_seed,
-            "policy_actions": "deterministic argmax",
+            "policy_actions": "deterministic; argmax for neural, rule-based for classical",
             "note": (
                 "Identical evaluation information does not imply equal training budgets. "
                 "BC is imitation-learning; PPO is environment-interaction training."
