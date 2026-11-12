@@ -289,8 +289,8 @@ def wilson_success_ci(
     half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
     return {
         "mean": p,
-        "ci_low": max(0.0, center - half),
-        "ci_high": min(1.0, center + half),
+        "ci_low": 0.0 if p == 0.0 else max(0.0, center - half),
+        "ci_high": 1.0 if p == 1.0 else min(1.0, center + half),
         "n": n,
     }
 
