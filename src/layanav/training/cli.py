@@ -63,6 +63,10 @@ def main() -> None:
     if args.command == "collect":
         from layanav.training.dataset import collect_expert_dataset, save_dataset
 
+        if args.seed <= args.val_seed + args.val_episodes - 1 and (
+            args.val_seed <= args.seed + args.train_episodes - 1
+        ):
+            parser.error("Train/validation map seed ranges must be disjoint")
         config = _environment(args)
         train_set, train_stats = collect_expert_dataset(
             episodes=args.train_episodes, seed_start=args.seed, config=config
@@ -70,10 +74,6 @@ def main() -> None:
         val_set, val_stats = collect_expert_dataset(
             episodes=args.val_episodes, seed_start=args.val_seed, config=config
         )
-        if args.seed <= args.val_seed + args.val_episodes - 1 and (
-            args.val_seed <= args.seed + args.train_episodes - 1
-        ):
-            parser.error("Train/validation map seed ranges must be disjoint")
         save_dataset(args.train, train_set)
         save_dataset(args.validation, val_set)
         print(json.dumps({"train": train_stats, "validation": val_stats}, indent=2))
