@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from layanav.envs import GridConfig, GridWorldEnv
+from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv
 from layanav.envs.map_io import load_map, save_map
 from layanav.planners import ArtificialPotentialFieldPolicy, OnlineAStarPolicy
 from layanav.recording import EpisodeRecorder, ReplaySession
@@ -188,6 +188,13 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("Movement:"))
         controls.addWidget(self.movement_mode)
 
+        self.topology = QComboBox()
+        for name in MAP_TOPOLOGIES:
+            self.topology.addItem(name.replace("_", "-").title(), name)
+        self.topology.currentIndexChanged.connect(self._change_topology)
+        controls.addWidget(QLabel("Topology:"))
+        controls.addWidget(self.topology)
+
         self.play_button = QPushButton("Play")
         self.play_button.clicked.connect(self._toggle_play)
         controls.addWidget(self.play_button)
@@ -315,6 +322,9 @@ class MainWindow(QMainWindow):
             self.movement_mode.findData(self.env.config.movement_mode)
         )
         self.movement_mode.blockSignals(False)
+        self.topology.blockSignals(True)
+        self.topology.setCurrentIndex(self.topology.findData(self.env.config.topology))
+        self.topology.blockSignals(False)
         self.policy = OnlineAStarPolicy(self.env.config.movement_mode)
         self.mode.setCurrentIndex(2)
         self.total_reward = 0.0
@@ -342,6 +352,22 @@ class MainWindow(QMainWindow):
     def _change_sensor_mode(self, index: int) -> None:
         self.env.config.sensor_mode = self.sensor_mode.itemData(index)
         self._reset_same_map()
+
+    def _change_topology(self, index: int) -> None:
+        topology = self.topology.itemData(index)
+        if topology == self.env.config.topology:
+            return
+        candidate = GridWorldEnv(replace(self.env.config, topology=topology))
+        candidate.reset(seed=int(np.random.default_rng().integers(0, 2**31)))
+        self._stop()
+        self.env = candidate
+        self.truth_canvas.env = candidate
+        self.belief_canvas.env = candidate
+        self.start = candidate.debug_snapshot()["robot"]
+        self.policy = OnlineAStarPolicy(candidate.config.movement_mode)
+        self.total_reward = 0.0
+        self._start_episode()
+        self._update_view()
 
     def _change_movement_mode(self, index: int) -> None:
         """Switch action-space size safely while preserving the editor map."""
@@ -396,6 +422,7 @@ class MainWindow(QMainWindow):
             observation_radius=self.radius.value(),
             sensor_mode=self.sensor_mode.currentData(),
             movement_mode=self.movement_mode.currentData(),
+            topology=self.topology.currentData(),
             hidden_obstacle_count=min(24, (size - 2) ** 2 // 8),
             known_wall_segments=min(5, size // 2),
             max_steps=self.env.config.max_steps,
@@ -582,12 +609,22 @@ class MainWindow(QMainWindow):
             "local_minimum", "blocked"
         ):
             suffix += " | APF stalled (local minimum / blocked)"
+        if (
+            self.mode.currentIndex() == 2
+            and self.replay is not None
+            and self.replay.finished
+            and self.replay.diagnostics
+        ):
+            reason = self.replay.diagnostics.get("failure_reason")
+            if reason:
+                suffix += f" | Recorded failure: {reason}"
         self.status_label.setText(
             f"Step {snap['step']}/{self.env.config.max_steps} | "
             f"position {snap['robot']} | goal {snap['goal']} | "
             f"reward {self.total_reward:.2f} | "
             f"discovered {int(snap['discovered_obstacles'].sum())} | "
             f"sensor {self.env.config.sensor_mode} | "
+            f"topology {self.env.config.topology} | "
             f"motion {self.env.config.movement_mode}-way | "
             f"distance {snap['distance_traveled']:.2f}"
             + suffix

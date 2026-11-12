@@ -17,17 +17,18 @@
 - [x] Configurable maps/start/goal, deterministic seeds, collision handling
 - [x] Online A* using only policy observations
 - [x] PySide6 viewer/editor; simulation playback and manual actions
-- [ ] Confirm end-to-end GUI appearance on user's Ubuntu 24.04 desktop
+- [x] Confirm GUI launches and navigates on user's Ubuntu 24.04 desktop
 - [ ] Confirm PyTorch and Laya compatibility on user's RTX 5070 hardware
 
 ## Milestone v0.2 — environment quality
 
 - [x] Ray-cast occlusion sensor; document partial-observability assumptions
 - [x] Versioned JSON map load/save with validation (including GUI)
-- [ ] Map-generation presets
+- [x] Seeded random/maze/corridor/rooms/u_shape/cluttered map-generation presets
 - [x] GUI path overlay, visited trajectory and adjustable simulation speed
 - [x] Deterministic episode JSON recorder and verified replay in GUI
-- [ ] Richer diagnostics, replay seek/scrub and map-generation presets
+- [x] Failure cause diagnostics, STAY/revisit metrics and replayable failed episodes
+- [ ] Replay seek/scrub controls
 - [x] Paired-seed bootstrap benchmark across controlled map families and held-out seeds
 
 ## Milestone v0.3 — classical and neural baselines
@@ -46,7 +47,7 @@
 
 - [x] Verify upstream Laya API, ModernBERT encoder access, package version and model license
 - [x] Numeric/spatial encoder: 6-channel grid → spatial tokens
-- [x] Adapter into Laya encoder interface and custom 5-action/critic heads (mock-backbone CI only)
+- [x] Adapter into Laya encoder interface and configurable 5/9-action/critic heads (mock-backbone CI only)
 - [x] Frozen-encoder behavior cloning and adapter-only checkpointing
 - [ ] Real checkpoint RTX 5070 forward/backward, GPU memory/latency measurement
 - [ ] PPO logprobs and actor/critic training with spatial Laya
@@ -59,6 +60,10 @@
 - Compare success, path length, collisions, speed and memory
 - Hold-out map families, different observation radii and sensor models
 - Dynamic obstacles only after stable static-obstacle baseline
+
+## Deferred work
+
+No Cached A*, D* Lite, LPA*, RRT* or hybrid APF-A* are planned for the current evaluation milestone. Benchmark v2 statistics (for example Wilson success intervals and SPL), additional map metrics and full Laya experiments remain separate work.
 
 ## Non-goals for v0.1
 

@@ -19,8 +19,9 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from layanav.envs import GridConfig, GridWorldEnv, action_count
+from layanav.envs import MAP_TOPOLOGIES, GridConfig, GridWorldEnv, action_count
 from layanav.planners import APFConfig, ArtificialPotentialFieldPolicy, OnlineAStarPolicy
+from layanav.recording import EpisodeRecorder
 
 FAMILIES = ("sparse", "standard", "dense")
 FAMILY_LAYOUTS = {
@@ -29,9 +30,12 @@ FAMILY_LAYOUTS = {
     "dense": (64, 10),
 }
 REPORT_FIELDS = (
-    "family", "method", "seed", "success", "steps", "moves", "collisions",
+    "topology", "family", "method", "seed", "success", "steps", "moves", "collisions",
     "total_reward", "mean_inference_ms", "distance_traveled",
     "oracle_shortest_moves", "oracle_shortest_distance", "oracle_efficiency",
+    "termination_reason", "failure_reason", "last_policy_status",
+    "stay_steps", "max_consecutive_stay", "revisits",
+    "goal_distance_remaining", "failure_trace",
 )
 
 
@@ -62,6 +66,7 @@ def make_family_config(
     sensor: str,
     max_steps: int,
     movement_mode: int = 4,
+    topology: str = "random",
 ) -> GridConfig:
     """Same observation shape; family controls obstacle density and wall segments."""
     if name not in FAMILY_LAYOUTS:
@@ -77,6 +82,7 @@ def make_family_config(
         known_wall_segments=scaled_walls,
         max_steps=max_steps,
         movement_mode=movement_mode,
+        topology=topology,
     )
 
 
@@ -92,12 +98,23 @@ def run_episode(
     *,
     seed: int,
     oracle_diagnostic: bool = False,
+    failure_trace_path: str | Path | None = None,
+    trace_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Evaluate one deterministic episode. No privileged data enters policy.act."""
     if type(seed) is not int or seed < 0:
         raise ValueError("seed must be a nonnegative integer")
     obs, info = env.reset(seed=seed)
     previous = info["position"]
+    goal_y, goal_x = np.unravel_index(int(np.argmax(obs[4])), obs[4].shape)
+    goal = (int(goal_x), int(goal_y))
+    recorder = EpisodeRecorder(env) if failure_trace_path is not None else None
+    visited = {previous}
+    revisits = 0
+    stay_steps = 0
+    consecutive_stay = 0
+    max_consecutive_stay = 0
+    last_policy_status: str | None = None
     oracle_moves: int | None = None
     oracle_distance: float | None = None
     if oracle_diagnostic:
@@ -130,11 +147,23 @@ def run_episode(
             raise ValueError(
                 f"Policy action {action!r} invalid for {env.config.movement_mode}-way motion"
             )
+        last_policy_status = getattr(policy, "last_status", None)
         obs, reward, terminated, truncated, info = env.step(action)
+        if recorder is not None:
+            recorder.record_step(action, obs, reward, terminated, truncated, info)
         total_reward += float(reward)
         collisions += int(info["collision"])
+        if action == 4:
+            stay_steps += 1
+            consecutive_stay += 1
+            max_consecutive_stay = max(max_consecutive_stay, consecutive_stay)
+        else:
+            consecutive_stay = 0
         if info["position"] != previous:
             moves += 1
+            if info["position"] in visited:
+                revisits += 1
+            visited.add(info["position"])
         previous = info["position"]
         if terminated or truncated:
             break
@@ -144,7 +173,25 @@ def run_episode(
         if success and oracle_distance is not None and info["distance_traveled"] > 0
         else None
     )
-    return {
+    if success:
+        failure_reason = None
+    elif last_policy_status in ("local_minimum", "blocked"):
+        failure_reason = last_policy_status
+    elif (
+        action == 4
+        and isinstance(policy, OnlineAStarPolicy)
+        and not policy.last_path
+    ):
+        failure_reason = "no_known_path"
+    elif consecutive_stay >= 3:
+        failure_reason = "persistent_stay"
+    else:
+        failure_reason = "time_limit"
+    trace_relative = (
+        f"failures/{Path(failure_trace_path).name}"
+        if not success and recorder is not None else None
+    )
+    result = {
         "seed": seed,
         "success": success,
         "steps": int(info["steps"]),
@@ -156,7 +203,21 @@ def run_episode(
         "oracle_shortest_distance": oracle_distance,
         "distance_traveled": info["distance_traveled"],
         "oracle_efficiency": efficiency,
+        "termination_reason": "goal_reached" if success else "time_limit",
+        "failure_reason": failure_reason,
+        "last_policy_status": last_policy_status,
+        "stay_steps": stay_steps,
+        "max_consecutive_stay": max_consecutive_stay,
+        "revisits": revisits,
+        "goal_distance_remaining": math.dist(previous, goal),
+        "failure_trace": trace_relative,
     }
+    if recorder is not None and not success:
+        recorder.diagnostics = {**(trace_context or {}), **result}
+        destination = Path(failure_trace_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        recorder.save(destination)
+    return result
 
 
 def bootstrap_mean_ci(
@@ -240,6 +301,8 @@ def benchmark(
     oracle_diagnostic: bool = False,
     bootstrap_seed: int = 2026,
     bootstrap_replicates: int = 2000,
+    save_failures: bool = True,
+    topologies: tuple[str, ...] = ("random",),
 ) -> dict[str, Any]:
     """Generate per-episode CSV plus JSON summary over paired held-out map seeds."""
     if episodes < 1 or eval_seed < 0:
@@ -252,6 +315,10 @@ def benchmark(
         raise ValueError("Unknown benchmark method")
     if set(families) - set(FAMILIES):
         raise ValueError("Unknown map family")
+    if not topologies or len(set(topologies)) != len(topologies):
+        raise ValueError("topologies must be nonempty and unique")
+    if set(topologies) - set(MAP_TOPOLOGIES):
+        raise ValueError("Unknown map topology")
     checkpoints = {"bc": bc_checkpoint, "ppo": ppo_checkpoint, "laya": laya_checkpoint}
     policies = {
         method: _create_policy(
@@ -260,10 +327,12 @@ def benchmark(
         for method in methods
     }
     configurations = {
-        family: make_family_config(
+        (topology, family): make_family_config(
             family, size=size, radius=radius, sensor=sensor,
             max_steps=max_steps, movement_mode=movement_mode,
+            topology=topology,
         )
+        for topology in topologies
         for family in families
     }
     # Fail on input-shape mismatch before evaluating any episodes.
@@ -286,23 +355,37 @@ def benchmark(
 
     rows: list[dict[str, Any]] = []
     summaries: dict[str, Any] = {}
-    for family, config in configurations.items():
+    for (topology, family), config in configurations.items():
         env = GridWorldEnv(config)
         try:
             for method, policy in policies.items():
                 episode_rows: list[dict[str, Any]] = []
                 for offset in range(episodes):
-                    row = run_episode(
-                        env, policy, seed=eval_seed + offset,
-                        oracle_diagnostic=oracle_diagnostic,
+                    seed = eval_seed + offset
+                    trace_path = (
+                        Path(output_dir) / "failures"
+                        / f"{topology}_{family}_{method}_seed_{seed}.json"
+                        if save_failures else None
                     )
-                    row = {"family": family, "method": method, **row}
+                    row = run_episode(
+                        env, policy, seed=seed,
+                        oracle_diagnostic=oracle_diagnostic,
+                        failure_trace_path=trace_path,
+                        trace_context={
+                            "topology": topology, "family": family, "method": method,
+                        },
+                    )
+                    row = {
+                        "topology": topology, "family": family, "method": method, **row,
+                    }
                     episode_rows.append(row)
                     rows.append(row)
                 summary: dict[str, Any] = {"episodes": episodes}
                 for metric in (
                     "success", "steps", "moves", "collisions", "total_reward",
                     "mean_inference_ms", "distance_traveled", "oracle_efficiency",
+                    "stay_steps", "max_consecutive_stay", "revisits",
+                    "goal_distance_remaining",
                 ):
                     series = np.asarray([
                         float(row[metric]) if row[metric] is not None else np.nan
@@ -315,7 +398,18 @@ def benchmark(
                         )
                         if valid.size else None
                     )
-                summaries[f"{family}/{method}"] = summary
+                summary["failure_reasons"] = {
+                    reason: sum(row["failure_reason"] == reason for row in episode_rows)
+                    for reason in sorted({
+                        row["failure_reason"] for row in episode_rows
+                        if row["failure_reason"] is not None
+                    })
+                }
+                summary["failure_traces"] = sum(
+                    row["failure_trace"] is not None for row in episode_rows
+                )
+                group = (f"{topology}/" if topology != "random" else "")
+                summaries[f"{group}{family}/{method}"] = summary
         finally:
             env.close()
 
@@ -354,6 +448,9 @@ def benchmark(
         "schema_version": 1,
         "protocol": {
             "paired_map_seeds": True,
+            "save_failure_traces": save_failures,
+            "topologies": list(topologies),
+            "failure_reason_is_diagnostic": True,
             "eval_seed_start": eval_seed,
             "eval_seed_end_inclusive": eval_seed + episodes - 1,
             "sensor": sensor,
@@ -370,7 +467,11 @@ def benchmark(
                 "BC is imitation-learning; PPO is environment-interaction training."
             ),
         },
-        "families": {name: asdict(config) for name, config in configurations.items()},
+        "families": {
+            (f"{topology}/" if topology != "random" else "") + family:
+                asdict(config)
+            for (topology, family), config in configurations.items()
+        },
         "methods": list(methods),
         "apf_config": asdict(apf_config or APFConfig()) if "apf" in methods else None,
         "checkpoints": checkpoint_details,

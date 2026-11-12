@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from layanav.envs import GridConfig
+from layanav.envs import MAP_TOPOLOGIES, GridConfig
 
 
 def main() -> None:
@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--grid-size", type=int, default=32)
     parser.add_argument("--movement-mode", type=int, choices=[4, 8], default=4)
+    parser.add_argument("--topology", choices=MAP_TOPOLOGIES, default="random")
     parser.add_argument("--radius", type=int, default=5)
     parser.add_argument("--sensor", choices=["circle", "raycast"], default="raycast")
     parser.add_argument("--hidden-obstacles", type=int, default=24)
@@ -37,6 +38,7 @@ def main() -> None:
         observation_radius=args.radius,
         sensor_mode=args.sensor,
         movement_mode=args.movement_mode,
+        topology=args.topology,
         hidden_obstacle_count=args.hidden_obstacles,
         known_wall_segments=args.wall_segments,
         max_steps=args.max_steps,

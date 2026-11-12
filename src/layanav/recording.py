@@ -48,10 +48,12 @@ class EpisodeRecorder:
             "observation_radius": env.config.observation_radius,
             "max_steps": env.config.max_steps,
             "movement_mode": env.config.movement_mode,
+            "topology": env.config.topology,
         }
         self.action_count = env.action_space.n
         self.initial_digest = _observation_digest(env.observe())
         self.steps: list[dict[str, Any]] = []
+        self.diagnostics: dict[str, Any] | None = None
 
     def record_step(
         self,
@@ -81,7 +83,7 @@ class EpisodeRecorder:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "schema_version": TRACE_SCHEMA_VERSION,
             "config": dict(self.config),
             "layout": {
@@ -93,6 +95,9 @@ class EpisodeRecorder:
             "initial_observation_sha256": self.initial_digest,
             "steps": [dict(step) for step in self.steps],
         }
+        if self.diagnostics is not None:
+            result["diagnostics"] = dict(self.diagnostics)
+        return result
 
     def save(self, path: str | Path) -> None:
         destination = Path(path)
@@ -139,6 +144,7 @@ class ReplaySession:
                 max_steps=max_steps,
                 sensor_mode=mode,
                 movement_mode=movement_mode,
+                topology=config.get("topology", "random"),
             )
             steps = trace["steps"]
             if not isinstance(steps, list) or len(steps) > max_steps:
@@ -153,6 +159,9 @@ class ReplaySession:
         obs, _ = self.env.reset(options=layout)
         if _observation_digest(obs) != initial_digest:
             raise ValueError("Trace initial observation mismatch")
+        self.diagnostics = trace.get("diagnostics")
+        if self.diagnostics is not None and not isinstance(self.diagnostics, dict):
+            raise ValueError("Malformed trace diagnostics")
         self.steps = steps
         self.index = 0
 
