@@ -61,6 +61,35 @@ In LayaNav Studio, select **Online A*** and click **Play/Step** to navigate. The
 
 **Security and research isolation:** Episode JSON stores the simulator's *complete obstacle truth* for deterministic replays. It is privileged debug data, not a policy observation or training input. The 6-channel policy observation remains separate. The trace records hashes rather than embedding every full observation; the same observations are regenerated and verified at replay time.
 
+## CNN + Behavior Cloning baseline (v0.3)
+
+The CNN policy is an **experimental baseline**, not a trained or calibrated model included in the repository. It consumes exactly the six-channel policy observation. The teacher is online A* operating only on the same belief map (it does **not** see hidden obstacle truth).
+
+For a CUDA GPU, first install a PyTorch build compatible with RTX 5070 using the [official PyTorch selector](https://pytorch.org/get-started/locally/), then install `python -m pip install -e ".[train]"`. For CPU-only testing, install a supported CPU wheel.
+
+```bash
+# Collect disjoint train/validation map seeds
+python -m layanav.training.cli collect \
+  --train datasets/teacher_train.npz \
+  --validation datasets/teacher_val.npz \
+  --train-episodes 100 --val-episodes 20 \
+  --sensor raycast
+
+# Behavior cloning using GPU if PyTorch CUDA is available
+python -m layanav.training.cli train \
+  --train datasets/teacher_train.npz \
+  --validation datasets/teacher_val.npz \
+  --output checkpoints/cnn_bc.pt \
+  --epochs 10 --device cuda
+
+# Hold-out evaluation: no overlap with train/val seed ranges
+python -m layanav.training.cli evaluate \
+  --checkpoint checkpoints/cnn_bc.pt \
+  --episodes 30 --seed 200000 --device cuda --sensor raycast
+```
+
+A dataset stores 6-channel observations as uint8 values in `[0,10]` (scaled by 10 to preserve visit-count increments) and action labels. It deliberately omits simulator-private hidden obstacle truth. Saved checkpoints use PyTorch weights-only-compatible dictionaries. Reported accuracy is imitation-label accuracy; success rate must be measured separately through evaluation. Data collection excludes failed teacher episodes and reports their count.
+
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). The **Laya adapter, PPO training, and model benchmark are not implemented in v0.2**; these require separate, testable milestones.
