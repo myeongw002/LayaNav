@@ -7,13 +7,13 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from layanav.envs import GridConfig  # noqa: E402
-from layanav.models.cnn_policy import CNNPolicy  # noqa: E402
-from layanav.training.behavior_cloning import (  # noqa: E402
+from layanav.envs import GridConfig
+from layanav.models.cnn_policy import CNNPolicy
+from layanav.training.behavior_cloning import (
     load_policy,
     train_behavior_cloning,
 )
-from layanav.training.dataset import (  # noqa: E402
+from layanav.training.dataset import (
     collect_expert_dataset,
     save_dataset,
 )
