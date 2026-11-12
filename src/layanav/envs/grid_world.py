@@ -48,9 +48,7 @@ def valid_transition(blocked: np.ndarray, x: int, y: int, dx: int, dy: int) -> b
     nx, ny = x + dx, y + dy
     if not (0 <= nx < w and 0 <= ny < h) or blocked[ny, nx]:
         return False
-    if dx and dy and (blocked[y, nx] or blocked[ny, x]):
-        return False
-    return True
+    return not (dx and dy and (blocked[y, nx] or blocked[ny, x]))
 
 
 def step_distance(dx: int, dy: int) -> float:
