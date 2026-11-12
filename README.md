@@ -147,6 +147,16 @@ python -m layanav.evaluation.cli \
 
 For reproducible pretrained weights, pass an **exact model Hub commit** with `--revision`; a default floating revision is not recommended for research. Only the small adapter/head state is saved; the pretrained backbone is loaded again on evaluation. The value head is **not** trained by Behavior Cloning.
 
+Run a **single real pretrained-weight GPU smoke check** on your Ubuntu machine before attempting training:
+
+```bash
+python -m layanav.training.laya_smoke \
+  --model-id convaiinnovations/laya --device cuda \
+  --batch-size 1 --token-grid 8 --grid-size 32
+```
+
+This reports the resolved checkpoint revision, forward/backward latency, actor/critic shapes, nonzero adapter gradient, and peak CUDA allocation/reservation. It **does not** measure navigation performance.
+
 **Validation limits:** unit tests use a tiny fake backbone. The 421M-parameter pretrained Laya checkpoint has **not** been executed on the target RTX 5070 here. There are no trained navigation results yet. See [docs/LAYA_ADAPTER.md](docs/LAYA_ADAPTER.md) for implementation details and rigorous baseline requirements.
 
 ## Roadmap
