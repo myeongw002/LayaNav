@@ -41,7 +41,7 @@ def test_structured_density_nested_and_full_component_preserved(topology, mode, 
         distance = sum(math.dist(a, b) for a, b in pairwise(route))
         instances.append((prior, hidden, start, goal, distance))
 
-    for a, b in zip(instances[:-1], instances[1:], strict=True):
+    for a, b in pairwise(instances):
         np.testing.assert_array_equal(a[0], b[0])
         assert a[2:4] == b[2:4]
         assert np.all(a[1] <= b[1]), "Hidden sets must be nested, not resampled"
