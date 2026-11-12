@@ -123,7 +123,7 @@ class ReplaySession:
             layout = validate_layout(trace["layout"])
             config = trace["config"]
             if not isinstance(config, dict):
-                raise ValueError("Invalid trace config")
+                raise TypeError("Invalid trace config")
             radius = config["observation_radius"]
             max_steps = config["max_steps"]
             mode = config["sensor_mode"]
@@ -140,7 +140,7 @@ class ReplaySession:
                 raise ValueError("Invalid trace step list")
             initial_digest = trace["initial_observation_sha256"]
             if not isinstance(initial_digest, str):
-                raise ValueError("Invalid initial observation digest")
+                raise TypeError("Invalid initial observation digest")
         except (KeyError, TypeError) as exc:
             raise ValueError("Malformed episode trace") from exc
 
@@ -152,7 +152,7 @@ class ReplaySession:
         self.index = 0
 
     @classmethod
-    def load(cls, path: str | Path) -> "ReplaySession":
+    def load(cls, path: str | Path) -> ReplaySession:
         with Path(path).open(encoding="utf-8") as file:
             return cls(json.load(file))
 
@@ -165,7 +165,7 @@ class ReplaySession:
             raise RuntimeError("Replay has no further actions")
         item = self.steps[self.index]
         if not isinstance(item, dict):
-            raise ValueError("Malformed trace step")
+            raise TypeError("Malformed trace step")
         action = item.get("action")
         if type(action) is not int or not 0 <= action < 5:
             raise ValueError("Invalid trace action")
