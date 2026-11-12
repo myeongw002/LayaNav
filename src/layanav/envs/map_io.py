@@ -6,11 +6,13 @@ environment creation and GUI editing, never for a navigation policy.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -48,7 +50,7 @@ def _coordinate(value: Any, name: str, size: int) -> tuple[int, int]:
 def validate_layout(layout: Mapping[str, Any]) -> dict[str, Any]:
     """Validate layout, return independent boolean arrays and integer coordinates."""
     if not isinstance(layout, Mapping):
-        raise ValueError("Map layout must be a mapping")
+        raise TypeError("Map layout must be a mapping")
     try:
         prior = _binary_grid(layout["static_map"], "static_map")
         hidden = _binary_grid(layout["hidden_obstacles"], "hidden_obstacles")
@@ -113,7 +115,7 @@ def load_map(path: str | Path) -> dict[str, Any]:
     with Path(path).open(encoding="utf-8") as handle:
         document = json.load(handle)
     if not isinstance(document, dict):
-        raise ValueError("Map JSON root must be an object")
+        raise TypeError("Map JSON root must be an object")
     if type(document.get("schema_version")) is not int or (
         document["schema_version"] != MAP_SCHEMA_VERSION
     ):
